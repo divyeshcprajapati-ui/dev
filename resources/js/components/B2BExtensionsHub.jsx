@@ -1,27 +1,19 @@
 import React, { useState } from 'react';
 import {
     Page,
-    Layout,
     Card,
     Tabs,
     ResourceList,
     ResourceItem,
     Badge,
     Text,
-    Icon,
     Box,
     InlineStack,
     BlockStack,
-    TextField
+    TextField,
+    Icon
 } from '@shopify/polaris';
-import {
-    SearchIcon,
-    ClipboardIcon,
-    CreditCardIcon,
-    SettingsIcon,
-    TeamIcon,
-    CashDollarIcon
-} from '@shopify/polaris-icons';
+import { SearchIcon, FilterIcon } from '@shopify/polaris-icons';
 import B2BRegistrationForm from './B2BRegistrationForm';
 
 export default function B2BExtensionsHub() {
@@ -34,32 +26,11 @@ export default function B2BExtensionsHub() {
     };
 
     const tabs = [
-        {
-            id: 'all-extensions',
-            content: 'All extensions (8)',
-            accessibilityLabel: 'All extensions',
-            panelID: 'all-extensions-content',
-        },
-        {
-            id: 'company-setup',
-            content: 'Company setup (2)',
-            panelID: 'company-setup-content',
-        },
-        {
-            id: 'ordering',
-            content: 'Ordering (4)',
-            panelID: 'ordering-content',
-        },
-        {
-            id: 'finance-credit',
-            content: 'Finance & credit (2)',
-            panelID: 'finance-credit-content',
-        },
-        {
-            id: 'active',
-            content: 'Active (1)',
-            panelID: 'active-content',
-        },
+        { id: 'all', content: 'All extensions (8)', panelID: 'all-content' },
+        { id: 'company-setup', content: 'Company setup (2)', panelID: 'company-setup-content' },
+        { id: 'ordering', content: 'Ordering (4)', panelID: 'ordering-content' },
+        { id: 'finance-credit', content: 'Finance & credit (2)', panelID: 'finance-credit-content' },
+        { id: 'active', content: 'Active (2)', panelID: 'active-content' }
     ];
 
     const extensions = [
@@ -67,12 +38,18 @@ export default function B2BExtensionsHub() {
             id: 'b2b-registration',
             title: 'B2B registration',
             description: 'Manage registration form & review applications before creating B2B company account.',
-            status: 'Inactive',
+            status: 'Active',
             isPlus: false,
             category: 'company-setup',
-            icon: ClipboardIcon,
-            iconBg: '#f0f4f9',
-            iconColor: '#3a77ff'
+            colorGrad: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+            mockIcon: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', width: '24px' }}>
+                    <div style={{ width: '100%', height: '3px', backgroundColor: '#0284c7', borderRadius: '1px' }} />
+                    <div style={{ width: '80%', height: '3px', backgroundColor: '#0284c7', borderRadius: '1px' }} />
+                    <div style={{ width: '100%', height: '3px', backgroundColor: '#0284c7', borderRadius: '1px' }} />
+                    <div style={{ width: '60%', height: '6px', backgroundColor: '#0369a1', borderRadius: '1px', marginTop: '2px', alignSelf: 'center' }} />
+                </div>
+            )
         },
         {
             id: 'credit-limit',
@@ -81,9 +58,13 @@ export default function B2BExtensionsHub() {
             status: 'Inactive',
             isPlus: true,
             category: 'finance-credit',
-            icon: CreditCardIcon,
-            iconBg: '#fff5f5',
-            iconColor: '#ff4d4f'
+            colorGrad: 'linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%)',
+            mockIcon: (
+                <div style={{ width: '26px', height: '16px', borderRadius: '3px', border: '1.5px solid #dc2626', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ width: '100%', height: '4px', backgroundColor: '#dc2626', marginTop: '2px' }} />
+                    <div style={{ width: '4px', height: '2px', backgroundColor: '#ef4444', position: 'absolute', bottom: '2px', left: '2px' }} />
+                </div>
+            )
         },
         {
             id: 'finance-payment',
@@ -92,9 +73,14 @@ export default function B2BExtensionsHub() {
             status: 'Inactive',
             isPlus: false,
             category: 'finance-credit',
-            icon: CashDollarIcon,
-            iconBg: '#f6ffed',
-            iconColor: '#52c41a'
+            colorGrad: 'linear-gradient(135deg, #fef08a 0%, #fde047 100%)',
+            mockIcon: (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '20px', width: '20px' }}>
+                    <div style={{ width: '4px', height: '8px', backgroundColor: '#ca8a04', borderRadius: '1px' }} />
+                    <div style={{ width: '4px', height: '14px', backgroundColor: '#ca8a04', borderRadius: '1px' }} />
+                    <div style={{ width: '4px', height: '18px', backgroundColor: '#eab308', borderRadius: '1px' }} />
+                </div>
+            )
         },
         {
             id: 'users-permissions',
@@ -103,13 +89,88 @@ export default function B2BExtensionsHub() {
             status: 'Inactive',
             isPlus: true,
             category: 'company-setup',
-            icon: TeamIcon,
-            iconBg: '#e6f7ff',
-            iconColor: '#1890ff'
+            colorGrad: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
+            mockIcon: (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a' }} />
+                        <div style={{ width: '12px', height: '6px', borderTopLeftRadius: '4px', borderTopRightRadius: '4px', backgroundColor: '#16a34a' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: 0.7 }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#15803d' }} />
+                        <div style={{ width: '10px', height: '5px', borderTopLeftRadius: '3px', borderTopRightRadius: '3px', backgroundColor: '#15803d' }} />
+                    </div>
+                </div>
+            )
+        },
+        {
+            id: 'quick-order-pad',
+            title: 'Quick order pad',
+            description: 'Provide B2B buyers with a quick grid format to enter SKU and quantities directly.',
+            status: 'Inactive',
+            isPlus: false,
+            category: 'ordering',
+            colorGrad: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+            mockIcon: (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 8px)', gap: '3px' }}>
+                    <div style={{ width: '8px', height: '8px', backgroundColor: '#7e22ce', borderRadius: '1px' }} />
+                    <div style={{ width: '8px', height: '8px', backgroundColor: '#9333ea', borderRadius: '1px' }} />
+                    <div style={{ width: '8px', height: '8px', backgroundColor: '#a855f7', borderRadius: '1px' }} />
+                    <div style={{ width: '8px', height: '8px', backgroundColor: '#c084fc', borderRadius: '1px' }} />
+                </div>
+            )
+        },
+        {
+            id: 'reorder-page',
+            title: 'Reorder page',
+            description: 'Enable B2B clients to reorder previously purchased items in a single click.',
+            status: 'Inactive',
+            isPlus: false,
+            category: 'ordering',
+            colorGrad: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)',
+            mockIcon: (
+                <div style={{ width: '22px', height: '22px', border: '2px solid #ea580c', borderRadius: '50%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '0', height: '0', borderTop: '4px solid transparent', borderBottom: '4px solid transparent', borderLeft: '6px solid #ea580c', position: 'absolute', top: '-2px', right: '4px', transform: 'rotate(-30deg)' }} />
+                </div>
+            )
+        },
+        {
+            id: 'csv-upload-order',
+            title: 'CSV upload order',
+            description: 'Allows wholesale buyers to upload large order sheets via CSV for instant cart generation.',
+            status: 'Active',
+            isPlus: false,
+            category: 'ordering',
+            colorGrad: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)',
+            mockIcon: (
+                <div style={{ width: '18px', height: '20px', border: '2px solid #0d9488', borderRadius: '2px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#0d9488' }}>CSV</span>
+                </div>
+            )
+        },
+        {
+            id: 'shopping-lists',
+            title: 'Shopping lists',
+            description: 'Allow clients to save re-usable purchase drafts and custom shopping lists.',
+            status: 'Inactive',
+            isPlus: false,
+            category: 'ordering',
+            colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',
+            mockIcon: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
+                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
+                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
+                    </div>
+                </div>
+            )
         }
     ];
 
-    // Simple filtering based on tab selection
     const filteredExtensions = extensions.filter(item => {
         const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                               item.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -118,176 +179,119 @@ export default function B2BExtensionsHub() {
         
         if (selectedTab === 0) return true; // All
         if (selectedTab === 1 && item.category === 'company-setup') return true;
+        if (selectedTab === 2 && item.category === 'ordering') return true;
         if (selectedTab === 3 && item.category === 'finance-credit') return true;
-        // Mock tabs: Ordering (2) is empty, Active (4) matches active status (none in our demo)
+        if (selectedTab === 4 && item.status === 'Active') return true;
         return false;
     });
 
+    if (currentView === 'b2b-registration') {
+        return <B2BRegistrationForm onBack={() => setCurrentView('hub')} />;
+    }
+
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f2f4' }}>
-            {/* Simulated Shopify Admin Sidebar */}
-            <div style={{
-                width: '240px',
-                backgroundColor: '#ebebeb',
-                borderRight: '1px solid #dcdcdc',
-                display: 'flex',
-                flexDirection: 'column',
-                fontSize: '13px',
-                color: '#303030',
-                padding: '12px 0'
-            }}>
-                <div style={{ padding: '0 20px 12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                        width: '28px',
-                        height: '28px',
-                        backgroundColor: '#1a1a1a',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: 'bold'
-                    }}>S</div>
-                    <Text variant="headingSm" as="span">shopify</Text>
-                </div>
-                
-                {/* Main Nav Items */}
-                <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {['Home', 'Orders', 'Products', 'Customers', 'Marketing', 'Discounts', 'Content', 'Markets', 'Finance', 'Analytics'].map(item => (
-                        <div key={item} style={{
-                            padding: '6px 12px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontWeight: '500'
-                        }}>{item}</div>
-                    ))}
-                </div>
-
-                <div style={{ padding: '8px 20px', fontSize: '11px', color: '#6d6d6d', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sales channels</div>
-                <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>Online Store</div>
-                    <div style={{ padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>Agentic</div>
-                </div>
-
-                <div style={{ padding: '8px 20px', fontSize: '11px', color: '#6d6d6d', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Apps</div>
-                <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <div style={{ padding: '6px 12px', borderRadius: '4px', backgroundColor: '#dfdfdf', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '14px' }}>😊</span> Duos B2B
-                    </div>
-                    {/* App Subnavigation */}
-                    <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '1px solid #dcdcdc', marginLeft: '20px', marginTop: '4px' }}>
-                        <div style={{ padding: '4px 12px', borderRadius: '4px', backgroundColor: '#d0d0d0', fontWeight: '600', cursor: 'pointer' }}>B2B extensions</div>
-                        <div style={{ padding: '4px 12px', borderRadius: '4px', color: '#616161', cursor: 'pointer' }}>Notifications</div>
-                        <div style={{ padding: '4px 12px', borderRadius: '4px', color: '#616161', cursor: 'pointer' }}>Translations</div>
-                        <div style={{ padding: '4px 12px', borderRadius: '4px', color: '#616161', cursor: 'pointer' }}>Pricing</div>
+        <Page>
+            <BlockStack gap="400">
+                {/* Title and Description */}
+                <div>
+                    <Text variant="headingLg" as="h1">B2B extensions hub</Text>
+                    <div style={{ marginTop: '4px' }}>
+                        <Text variant="bodyMd" tone="subdued">
+                            Manage your front-end and back-end B2B processes and provide B2B customers with self-service account capabilities.
+                        </Text>
                     </div>
                 </div>
 
-                <div style={{ marginTop: 'auto', padding: '4px 8px' }}>
-                    <div style={{ padding: '6px 12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                        <Icon source={SettingsIcon} tone="secondary" /> Settings
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Application Area */}
-            <div style={{ flex: 1, padding: '24px 32px' }}>
-                {currentView === 'b2b-registration' ? (
-                    <B2BRegistrationForm onBack={() => setCurrentView('hub')} />
-                ) : (
-                    <Page
-                        title="Duos B2B"
-                        subtitle="B2B extensions hub"
-                        backAction={{ content: 'Apps', url: '#' }}
-                    >
-                        <BlockStack gap="400">
-                            {/* Title and Description */}
-                            <div style={{ marginBottom: '12px' }}>
-                                <Text variant="headingLg" as="h1">B2B extensions hub</Text>
-                                <div style={{ marginTop: '4px' }}>
-                                    <Text variant="bodyMd" tone="subdued">
-                                        Manage your front-end and back-end B2B processes and provide B2B customers with self-service account capabilities.
-                                    </Text>
-                                </div>
-                            </div>
-
-                            {/* Tabs Navigation & Search */}
-                            <Card padding="0">
-                                <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e1e3e5', paddingRight: '16px' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} fitted={false} />
-                                    </div>
-                                    <div style={{ width: '240px' }}>
-                                        <TextField
-                                            value={searchQuery}
-                                            onChange={(val) => setSearchQuery(val)}
-                                            prefix={<Icon source={SearchIcon} />}
-                                            placeholder="Search extensions..."
-                                            autoComplete="off"
-                                            labelHidden
-                                            label="Search"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Extensions List */}
-                                <ResourceList
-                                    resourceName={{ singular: 'extension', plural: 'extensions' }}
-                                    items={filteredExtensions}
-                                    renderItem={(item) => {
-                                        const { id, title, description, status, isPlus, icon, iconBg, iconColor } = item;
-                                        return (
-                                            <ResourceItem
-                                                id={id}
-                                                accessibilityLabel={`View details for ${title}`}
-                                                onClick={() => {
-                                                    if (id === 'b2b-registration') {
-                                                        setCurrentView('b2b-registration');
-                                                    }
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                        {/* Decorative Icon */}
-                                                        <div style={{
-                                                            width: '48px',
-                                                            height: '48px',
-                                                            backgroundColor: iconBg,
-                                                            borderRadius: '8px',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            border: '1px solid #e1e3e5'
-                                                        }}>
-                                                            <span style={{ color: iconColor, display: 'flex', alignItems: 'center' }}>
-                                                                <Icon source={icon} />
-                                                            </span>
-                                                        </div>
-
-                                                        <BlockStack gap="050">
-                                                            <InlineStack align="start" blockAlign="center" gap="150">
-                                                                <Text variant="headingSm" as="h3">{title}</Text>
-                                                                {isPlus && (
-                                                                    <Badge tone="info" progress="complete">Plus</Badge>
-                                                                )}
-                                                            </InlineStack>
-                                                            <Text variant="bodyMd" tone="subdued">{description}</Text>
-                                                        </BlockStack>
-                                                    </div>
-
-                                                    <div>
-                                                        <Badge tone="attention">{status}</Badge>
-                                                    </div>
-                                                </div>
-                                            </ResourceItem>
-                                        );
-                                    }}
+                {/* Tabs Navigation & Search Bar */}
+                <Card padding="0">
+                    <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e1e3e5', padding: '0 16px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '300px' }}>
+                            <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} fitted={false} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+                            <div style={{ width: '180px' }}>
+                                <TextField
+                                    value={searchQuery}
+                                    onChange={(val) => setSearchQuery(val)}
+                                    prefix={<Icon source={SearchIcon} />}
+                                    placeholder="Search"
+                                    autoComplete="off"
+                                    labelHidden
+                                    label="Search"
                                 />
-                            </Card>
-                        </BlockStack>
-                    </Page>
-                )}
-            </div>
-        </div>
+                            </div>
+                            <div style={{
+                                width: '36px',
+                                height: '36px',
+                                border: '1px solid #c9cccf',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                backgroundColor: 'white'
+                            }}>
+                                <Icon source={FilterIcon} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Extensions List */}
+                    <ResourceList
+                        resourceName={{ singular: 'extension', plural: 'extensions' }}
+                        items={filteredExtensions}
+                        renderItem={(item) => {
+                            const { id, title, description, status, isPlus, mockIcon, colorGrad } = item;
+                            const isActive = status === 'Active';
+                            
+                            return (
+                                <ResourceItem
+                                    id={id}
+                                    accessibilityLabel={`View details for ${title}`}
+                                    onClick={() => {
+                                        if (id === 'b2b-registration') {
+                                            setCurrentView('b2b-registration');
+                                        }
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                            {/* Decorative Mock Icon Box */}
+                                            <div style={{
+                                                width: '52px',
+                                                height: '52px',
+                                                background: colorGrad,
+                                                borderRadius: '8px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                border: '1.5px solid rgba(0, 0, 0, 0.08)',
+                                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.02)'
+                                            }}>
+                                                {mockIcon}
+                                            </div>
+
+                                            <BlockStack gap="050">
+                                                <InlineStack align="start" blockAlign="center" gap="100">
+                                                    <Text variant="headingSm" as="h3">{title}</Text>
+                                                    {isPlus && (
+                                                        <Badge tone="info" progress="complete">Plus</Badge>
+                                                    )}
+                                                </InlineStack>
+                                                <Text variant="bodyMd" tone="subdued">{description}</Text>
+                                            </BlockStack>
+                                        </div>
+
+                                        <div>
+                                            <Badge tone={isActive ? 'success' : 'subdued'}>{status}</Badge>
+                                        </div>
+                                    </div>
+                                </ResourceItem>
+                            );
+                        }}
+                    />
+                </Card>
+            </BlockStack>
+        </Page>
     );
 }

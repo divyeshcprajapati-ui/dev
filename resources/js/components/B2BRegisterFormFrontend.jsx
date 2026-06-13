@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { registrationService } from '../services/registrationService';
+
 
 export default function B2BRegisterFormFrontend() {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -20,6 +24,9 @@ export default function B2BRegisterFormFrontend() {
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [fileObject, setFileObject] = useState(null);
+    const [generalError, setGeneralError] = useState('');
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -46,8 +53,9 @@ export default function B2BRegisterFormFrontend() {
         return newErrors;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setGeneralError('');
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
@@ -55,69 +63,34 @@ export default function B2BRegisterFormFrontend() {
         }
 
         setLoading(true);
-        // Simulate API call and save locally
-        setTimeout(() => {
-            const saved = localStorage.getItem('b2b_submissions');
-            let list = [];
+        try {
+            // Exclude temporary businessDocument string before submission
+            const { businessDocument, ...submitData } = formData;
+            const response = await registrationService.submitRegistration(submitData, fileObject);
             
-            // Standard initial mock list
-            const defaultMocks = [
-                {
-                    id: '1',
-                    company: 'Acme Corp',
-                    contact: 'John Doe',
-                    email: 'john@acme.com',
-                    taxId: 'US-987654321',
-                    status: 'Pending',
-                    date: '2026-06-08'
-                },
-                {
-                    id: '2',
-                    company: 'Global Trade LLC',
-                    contact: 'Sarah Jenkins',
-                    email: 's.jenkins@globaltrade.com',
-                    taxId: 'GB-123456789',
-                    status: 'Approved',
-                    date: '2026-06-07'
-                },
-                {
-                    id: '3',
-                    company: 'Apex Retailers',
-                    contact: 'Michael Chang',
-                    email: 'mchang@apex.io',
-                    taxId: 'CA-445566778',
-                    status: 'Rejected',
-                    date: '2026-06-06'
-                }
-            ];
-
-            if (saved) {
-                try {
-                    list = JSON.parse(saved);
-                } catch (err) {
-                    list = defaultMocks;
-                }
+            if (response.success) {
+                setLoading(false);
+                navigate('/customers');
             } else {
-                list = defaultMocks;
+                setGeneralError(response.message || 'Submission failed. Please try again.');
+                setLoading(false);
             }
-
-            const newSub = {
-                id: String(Date.now()),
-                company: formData.companyName,
-                contact: `${formData.firstName} ${formData.lastName}`,
-                email: formData.email,
-                taxId: formData.taxId || '-',
-                status: 'Pending',
-                date: new Date().toISOString().split('T')[0]
-            };
-
-            list.unshift(newSub);
-            localStorage.setItem('b2b_submissions', JSON.stringify(list));
-
+        } catch (error) {
             setLoading(false);
-            setSubmitted(true);
-        }, 1200);
+            if (error.errors) {
+                // Map Laravel validation errors to frontend error fields
+                const apiErrors = {};
+                Object.keys(error.errors).forEach(key => {
+                    apiErrors[key] = error.errors[key][0]; // Take first error message
+                });
+                setErrors(apiErrors);
+                setGeneralError('Please fix the validation errors below.');
+            } else {
+                setGeneralError(error.message || 'An error occurred during submission.');
+            }
+        }
     };
+
 
     if (submitted) {
         return (
@@ -206,6 +179,20 @@ export default function B2BRegisterFormFrontend() {
                 </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {generalError && (
+                        <div style={{
+                            padding: '12px 16px',
+                            backgroundColor: '#fce8e6',
+                            border: '1px solid #d82c0d',
+                            borderRadius: '6px',
+                            color: '#c5221f',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                        }}>
+                            {generalError}
+                        </div>
+                    )}
+
                     <div style={{ display: 'flex', gap: '16px' }}>
                         <div style={{ flex: 1 }}>
                             <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>First Name *</label>
@@ -426,7 +413,7 @@ export default function B2BRegisterFormFrontend() {
                     <div style={{ borderTop: '1px solid #e1e3e5', paddingTop: '20px', marginTop: '10px' }}>
                         <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>Business License / Reseller Certificate</label>
                         <div style={{
-                            border: '2px dashed #c9cccf',
+                            border: errors.businessDocument ? '2px dashed #d82c0d' : '2px dashed #c9cccf',
                             borderRadius: '8px',
                             padding: '20px',
                             textAlign: 'center',
@@ -437,7 +424,15 @@ export default function B2BRegisterFormFrontend() {
                             <input 
                                 type="file"
                                 name="businessDocument"
-                                onChange={(e) => setFormData(prev => ({ ...prev, businessDocument: e.target.files[0]?.name || '' }))}
+                                onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    setFileObject(file || null);
+                                    setFormData(prev => ({ ...prev, businessDocument: file?.name || '' }));
+                                    if (errors.businessDocument) {
+                                        setErrors(prev => ({ ...prev, businessDocument: '' }));
+                                    }
+                                }}
+
                                 style={{
                                     position: 'absolute',
                                     top: 0,
@@ -458,6 +453,8 @@ export default function B2BRegisterFormFrontend() {
                             </p>
                             <span style={{ fontSize: '12px', color: '#6d7175' }}>PDF, PNG, JPG up to 10MB</span>
                         </div>
+                        {errors.businessDocument && <span style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.businessDocument}</span>}
+
                     </div>
 
                     <div>

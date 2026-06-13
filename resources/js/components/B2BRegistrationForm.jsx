@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { registrationService } from '../services/registrationService';
+
 import {
     Page,
     Card,
@@ -18,6 +21,7 @@ import {
 } from '@shopify/polaris';
 
 export default function B2BRegistrationForm({ onBack }) {
+    const navigate = useNavigate();
     // Top Tabs Navigation
     const [activeTab, setActiveTab] = useState(0);
     const builderTabs = [
@@ -98,14 +102,7 @@ export default function B2BRegistrationForm({ onBack }) {
     // Submissions State (Temporary Local Storage)
     const [submissions, setSubmissions] = useState(() => {
         const saved = localStorage.getItem('b2b_submissions');
-        if (saved) {
-            try {
-                return JSON.parse(saved);
-            } catch (e) {
-                console.error("Failed to parse submissions", e);
-            }
-        }
-        return [
+        const defaultMocks = [
             {
                 id: '1',
                 company: 'Acme Corp',
@@ -134,12 +131,57 @@ export default function B2BRegistrationForm({ onBack }) {
                 date: '2026-06-06'
             }
         ];
+
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch (e) {
+                console.error("Failed to parse submissions", e);
+            }
+        }
+        return defaultMocks;
     });
 
-    // Keep Local Storage in sync
+    const [loadingLeads, setLoadingLeads] = useState(false);
+    const [leadsError, setLeadsError] = useState('');
+
+    const fetchLeads = async () => {
+        setLoadingLeads(true);
+        setLeadsError('');
+        try {
+            const response = await registrationService.getApplications();
+            if (response && response.success && Array.isArray(response.data)) {
+                setSubmissions(response.data);
+            } else {
+                // Safety: ensure we never set undefined/null
+                setSubmissions([]);
+            }
+        } catch (error) {
+            console.error("Error fetching leads:", error);
+            setLeadsError("Failed to fetch applications from server.");
+            // Don't clear submissions on error — keep whatever we have
+        } finally {
+            setLoadingLeads(false);
+        }
+    };
+
+    // Fetch DB leads on tab change to Applications tab
     useEffect(() => {
-        localStorage.setItem('b2b_submissions', JSON.stringify(submissions));
+        if (activeTab === 1) {
+            fetchLeads();
+        }
+    }, [activeTab]);
+
+    // Keep Local Storage in sync (with safety check)
+    useEffect(() => {
+        if (Array.isArray(submissions)) {
+            localStorage.setItem('b2b_submissions', JSON.stringify(submissions));
+        }
     }, [submissions]);
+
 
     // Active Preview Step index (matches expanded folder)
     const activeStepIndex = steps.findIndex(s => s.id === activeEditSection) >= 0 
@@ -206,17 +248,32 @@ export default function B2BRegistrationForm({ onBack }) {
         setPreviewFormData(prev => ({ ...prev, [fieldId]: val }));
     };
 
-    const handleApprove = (id) => {
-        setSubmissions(submissions.map(sub => 
-            sub.id === id ? { ...sub, status: 'Approved' } : sub
-        ));
+    const handleApprove = async (id) => {
+        try {
+            const response = await registrationService.approveApplication(id);
+            if (response.success) {
+                setSubmissions(prev => prev.map(sub => 
+                    sub.id === id ? { ...sub, status: 'Approved' } : sub
+                ));
+            }
+        } catch (error) {
+            alert(error.message || "Failed to approve application.");
+        }
     };
 
-    const handleReject = (id) => {
-        setSubmissions(submissions.map(sub => 
-            sub.id === id ? { ...sub, status: 'Rejected' } : sub
-        ));
+    const handleReject = async (id) => {
+        try {
+            const response = await registrationService.rejectApplication(id);
+            if (response.success) {
+                setSubmissions(prev => prev.map(sub => 
+                    sub.id === id ? { ...sub, status: 'Rejected' } : sub
+                ));
+            }
+        } catch (error) {
+            alert(error.message || "Failed to reject application.");
+        }
     };
+
 
     const handleClearSubmissions = () => {
         if (confirm("Are you sure you want to clear all lead submissions?")) {
@@ -225,44 +282,29 @@ export default function B2BRegistrationForm({ onBack }) {
     };
 
     // Submitting live preview form
-    const handlePreviewSubmit = () => {
-        const newSubmission = {
-            id: String(Date.now()),
-            company: previewFormData.companyName || 'Mock Company LLC',
-            contact: `${previewFormData.firstName || 'Jane'} ${previewFormData.lastName || 'Smith'}`,
-            email: previewFormData.email || 'jane@company.com',
-            taxId: previewFormData.taxId || '-',
-            status: 'Pending',
-            date: new Date().toISOString().split('T')[0]
-        };
+    const handlePreviewSubmit = async () => {
+        try {
+            const submitData = {
+                firstName: previewFormData.firstName || 'Jane',
+                lastName: previewFormData.lastName || 'Smith',
+                email: previewFormData.email || 'jane@company.com',
+                companyName: previewFormData.companyName || 'Mock Company LLC',
+                address: previewFormData.companyAddress || '123 Preview St',
+                city: previewFormData.companyCity || 'Cityville',
+                zip: previewFormData.zip || '12345',
+                country: previewFormData.companyCountry || 'United States',
+                taxId: previewFormData.taxId || '',
+                phone: previewFormData.phone || '',
+                notes: previewFormData.message || ''
+            };
+            
+            await registrationService.submitRegistration(submitData);
+        } catch (error) {
+            console.error("Failed to save preview submission to database", error);
+        }
 
-        const updatedList = [newSubmission, ...submissions];
-        setSubmissions(updatedList);
-        
-        // Reset preview form
-        setPreviewFormData({
-            companyName: '',
-            companyAddress: '',
-            apartment: '',
-            companyCountry: '',
-            companyCity: '',
-            province: '',
-            zip: '',
-            message: '',
-            number: '',
-            taxId: '',
-            document_upload: '',
-            firstName: '',
-            lastName: '',
-            email: '',
-            phoneCode: 'US +1',
-            phone: ''
-        });
-
-        // Switch to the leads table tab
-        setActiveTab(1);
-
-        alert("Test application submitted! Directing you to the Applications & Leads table.");
+        // Redirect to the customer listing page
+        navigate('/customers');
     };
 
     // Rendering SVG Icons helper
@@ -320,18 +362,27 @@ export default function B2BRegistrationForm({ onBack }) {
         );
     };
 
-    // Submissions table rows
-    const submissionRows = submissions.map((sub) => {
+    // Submissions table rows (with safety fallback)
+    const safeSubmissions = Array.isArray(submissions) ? submissions : [];
+    const submissionRows = safeSubmissions.map((sub) => {
         let statusTone = 'attention';
         if (sub.status === 'Approved') statusTone = 'success';
         if (sub.status === 'Rejected') statusTone = 'critical';
 
+        // Format Date
+        const dateStr = sub.created_at ? new Date(sub.created_at).toLocaleDateString() : '-';
+        // Support both old simulated structure (sub.company, sub.contact) and database structure (sub.company_name, sub.first_name, sub.last_name)
+        const companyName = sub.company_name || sub.company;
+        const contactName = sub.first_name ? `${sub.first_name} ${sub.last_name}` : sub.contact;
+        const taxId = sub.tax_id || sub.taxId;
+
         return [
-            sub.date,
-            <Text variant="bodyMd" fontWeight="semibold">{sub.company}</Text>,
-            sub.contact,
+            dateStr,
+            <Text variant="bodyMd" fontWeight="semibold">{companyName}</Text>,
+            contactName,
             sub.email,
-            sub.taxId,
+            sub.phone || '-',
+            taxId || '-',
             <Badge tone={statusTone}>{sub.status}</Badge>,
             sub.status === 'Pending' ? (
                 <InlineStack gap="100">
@@ -369,6 +420,7 @@ export default function B2BRegistrationForm({ onBack }) {
             ) : '-'
         ];
     });
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f1f2f4', overflow: 'hidden' }}>
@@ -1145,16 +1197,16 @@ export default function B2BRegistrationForm({ onBack }) {
                                 <Text variant="headingMd" as="h2">Incoming Applications</Text>
                                 <Text variant="bodySm" tone="subdued">Review and approve self-service registration forms before creating company accounts.</Text>
                             </div>
-                            <Button tone="critical" onClick={handleClearSubmissions} disabled={submissions.length === 0}>
+                            <Button tone="critical" onClick={handleClearSubmissions} disabled={safeSubmissions.length === 0}>
                                 Clear all leads
                             </Button>
                         </InlineStack>
 
                         <Card padding="0">
-                            {submissions.length > 0 ? (
+                            {safeSubmissions.length > 0 ? (
                                 <DataTable
-                                    columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text']}
-                                    headers={['Date', 'Company', 'Contact Person', 'Email Address', 'Tax ID', 'Status', 'Actions']}
+                                    columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                                    headings={['Date', 'Company', 'Contact Person', 'Email Address', 'Phone', 'Tax ID', 'Status', 'Actions']}
                                     rows={submissionRows}
                                 />
                             ) : (

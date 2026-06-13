@@ -8,10 +8,10 @@ import '@shopify/polaris/build/esm/styles.css';
 const B2BDashboard = lazy(() => import('./components/B2BDashboard'));
 const B2BExtensionsHub = lazy(() => import('./components/B2BExtensionsHub'));
 const Translations = lazy(() => import('./components/Translations'));
-const B2BRegisterFormFrontend = lazy(() => import('./components/B2BRegisterFormFrontend'));
 const CustomerListing = lazy(() => import('./components/CustomerListing'));
 const Pricing = lazy(() => import('./components/Pricing'));
 const Notifications = lazy(() => import('./components/Notifications'));
+const SinglePageRegistration = lazy(() => import('./components/SinglePageRegistration'));
 
 import { BrowserRouter, Routes, Route, Link as ReactRouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { NavMenu } from '@shopify/app-bridge-react';
@@ -153,7 +153,7 @@ function AdminRoutes() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/translations" element={<Translations />} />
           <Route path="/pricing" element={<Pricing />} />
-          <Route path="/register" element={<B2BRegisterFormFrontend />} />
+          <Route path="/register" element={<SinglePageRegistration />} />
         </Routes>
       </Suspense>
     </>

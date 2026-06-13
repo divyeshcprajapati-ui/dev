@@ -40,44 +40,55 @@ export default function B2BRegistrationForm({ onBack }) {
     const [submitBtnLabel, setSubmitBtnLabel] = useState('Submit');
 
     // Tree/Steps Config
-    const [steps, setSteps] = useState([
-        {
-            id: 'company-info',
-            name: 'Company info',
-            isOpen: true,
-            fields: [
-                { id: 'company_name', name: 'Company name', type: 'text', required: true },
-                { id: 'company_address', name: 'Company address', type: 'text', required: true },
-                { id: 'apartment', name: 'Appartment, suite, etc.', type: 'text', required: false },
-                { id: 'company_country', name: 'Company country', type: 'select', required: true },
-                { id: 'company_city', name: 'Company city', type: 'text', required: true },
-                { id: 'province', name: 'Province', type: 'text', required: true },
-                { id: 'zip', name: 'Zip code / Postal code', type: 'text', required: true },
-                { id: 'message', name: 'Message', type: 'textarea', required: false },
-                { id: 'number', name: 'Number', type: 'number', required: false }
-            ]
-        },
-        {
-            id: 'taxes-terms',
-            name: 'Taxes and terms',
-            isOpen: false,
-            fields: [
-                { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true },
-                { id: 'document_upload', name: 'Business License / Document Upload', type: 'file', required: false }
-            ]
-        },
-        {
-            id: 'account',
-            name: 'Account',
-            isOpen: false,
-            fields: [
-                { id: 'first_name', name: 'First name', type: 'text', required: true },
-                { id: 'last_name', name: 'Last name', type: 'text', required: true },
-                { id: 'email', name: 'Your email', type: 'email', required: true },
-                { id: 'phone', name: 'Your phone number', type: 'phone', required: true }
-            ]
+    const [steps, setSteps] = useState(() => {
+        const saved = localStorage.getItem('b2b_form_steps');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                // Migration: Flatten old multi-step structure if it has > 1 steps
+                if (parsed.length > 1) {
+                    const allFields = parsed.reduce((acc, step) => [...acc, ...step.fields], []);
+                    return [{
+                        id: 'form-fields',
+                        name: 'Registration Form',
+                        isOpen: true,
+                        fields: allFields
+                    }];
+                }
+                return parsed;
+            } catch (e) {
+                console.error("Failed to parse form steps from local storage", e);
+            }
         }
-    ]);
+        return [
+            {
+                id: 'form-fields',
+                name: 'Registration Form',
+                isOpen: true,
+                fields: [
+                    { id: 'company_name', name: 'Company name', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'company_address', name: 'Company address', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'apartment', name: 'Appartment, suite, etc.', type: 'text', required: false, metafieldType: 'none' },
+                    { id: 'company_country', name: 'Company country', type: 'select', required: true, metafieldType: 'none' },
+                    { id: 'company_city', name: 'Company city', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'province', name: 'Province', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'zip', name: 'Zip code / Postal code', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'message', name: 'Message', type: 'textarea', required: false, metafieldType: 'none' },
+                    { id: 'number', name: 'Number', type: 'number', required: false, metafieldType: 'none' },
+                    { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'document_upload', name: 'Business License / Document Upload', type: 'file', required: false, metafieldType: 'none' },
+                    { id: 'first_name', name: 'First name', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'last_name', name: 'Last name', type: 'text', required: true, metafieldType: 'none' },
+                    { id: 'email', name: 'Your email', type: 'email', required: true, metafieldType: 'none' },
+                    { id: 'phone', name: 'Your phone number', type: 'phone', required: true, metafieldType: 'none' }
+                ]
+            }
+        ];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('b2b_form_steps', JSON.stringify(steps));
+    }, [steps]);
 
     // Live Preview Form State
     const [previewFormData, setPreviewFormData] = useState({
@@ -98,6 +109,30 @@ export default function B2BRegistrationForm({ onBack }) {
         phoneCode: 'US +1',
         phone: ''
     });
+    const [previewErrors, setPreviewErrors] = useState({});
+
+    // Location API Data for Preview
+    const [countriesList, setCountriesList] = useState([]);
+    const [statesList, setStatesList] = useState([]);
+    const [previewSelectedCountryCode, setPreviewSelectedCountryCode] = useState('');
+
+    useEffect(() => {
+        fetch('/api/b2b/locations/countries')
+            .then(res => res.json())
+            .then(data => setCountriesList(data || []))
+            .catch(err => console.error('Error fetching countries:', err));
+    }, []);
+
+    useEffect(() => {
+        if (previewSelectedCountryCode) {
+            fetch(`/api/b2b/locations/states?countryCode=${previewSelectedCountryCode}`)
+                .then(res => res.json())
+                .then(data => setStatesList(data || []))
+                .catch(err => console.error('Error fetching states:', err));
+        } else {
+            setStatesList([]);
+        }
+    }, [previewSelectedCountryCode]);
 
     // Submissions State (Temporary Local Storage)
     const [submissions, setSubmissions] = useState(() => {
@@ -229,7 +264,41 @@ export default function B2BRegistrationForm({ onBack }) {
             if (s.id === stepId) {
                 return {
                     ...s,
-                    fields: [...s.fields, { id: newId, name: fieldName, type: 'text', required: false }]
+                    fields: [...s.fields, { id: newId, name: fieldName, type: 'text', required: false, metafieldType: 'none' }]
+                };
+            }
+            return s;
+        }));
+    };
+
+    const handleToggleMetafield = (stepId, fieldId) => {
+        const options = ['none', 'customer', 'company'];
+        setSteps(steps.map(s => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    fields: s.fields.map(f => {
+                        if (f.id === fieldId) {
+                            const current = f.metafieldType || 'none';
+                            const nextIndex = (options.indexOf(current) + 1) % options.length;
+                            return { ...f, metafieldType: options[nextIndex] };
+                        }
+                        return f;
+                    })
+                };
+            }
+            return s;
+        }));
+    };
+
+    const handleRenameField = (stepId, fieldId, currentName) => {
+        const newName = prompt("Enter new field name:", currentName);
+        if (!newName || newName === currentName) return;
+        setSteps(steps.map(s => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    fields: s.fields.map(f => f.id === fieldId ? { ...f, name: newName } : f)
                 };
             }
             return s;
@@ -246,6 +315,16 @@ export default function B2BRegistrationForm({ onBack }) {
 
     const handlePreviewChange = (fieldId, val) => {
         setPreviewFormData(prev => ({ ...prev, [fieldId]: val }));
+        if (previewErrors[fieldId]) {
+            setPreviewErrors(prev => ({ ...prev, [fieldId]: '' }));
+        }
+
+        // Special handling for Country to load states
+        if (fieldId === 'companyCountry') {
+            const country = countriesList.find(c => c.name === val || c.isoCode === val);
+            setPreviewSelectedCountryCode(country ? country.isoCode : '');
+            setPreviewFormData(prev => ({ ...prev, province: '' })); // reset state when country changes
+        }
     };
 
     const handleApprove = async (id) => {
@@ -283,6 +362,46 @@ export default function B2BRegistrationForm({ onBack }) {
 
     // Submitting live preview form
     const handlePreviewSubmit = async () => {
+        // Validate Preview
+        const newErrors = {};
+        const allFields = steps[0]?.fields || [];
+        allFields.forEach(field => {
+            const stateKey = field.id === 'company_name' ? 'companyName' :
+                             field.id === 'company_address' ? 'companyAddress' :
+                             field.id === 'apartment' ? 'apartment' :
+                             field.id === 'company_city' ? 'companyCity' :
+                             field.id === 'province' ? 'province' :
+                             field.id === 'zip' ? 'zip' :
+                             field.id === 'message' ? 'message' :
+                             field.id === 'number' ? 'number' :
+                             field.id === 'tax_id' ? 'taxId' :
+                             field.id === 'email' ? 'email' :
+                             field.id === 'first_name' ? 'firstName' :
+                             field.id === 'last_name' ? 'lastName' :
+                             field.id === 'company_country' ? 'companyCountry' : field.id;
+
+            const val = previewFormData[stateKey];
+            if (field.required && (!val || (typeof val === 'string' && !val.trim())) && field.type !== 'file') {
+                if (stateKey === 'province' && statesList.length === 0) {
+                    // Skip validation for province if no states
+                } else {
+                    newErrors[stateKey] = `${field.name} is required`;
+                }
+            } else if (stateKey === 'email' && val && !/\S+@\S+\.\S+/.test(val)) {
+                newErrors.email = 'Please enter a valid email address';
+            } else if (stateKey === 'phone' && val) {
+                const phoneRegex = /^[0-9\+\-\s\(\)]+$/;
+                if (!phoneRegex.test(val)) {
+                    newErrors.phone = 'Invalid phone number format';
+                }
+            }
+        });
+
+        if (Object.keys(newErrors).length > 0) {
+            setPreviewErrors(newErrors);
+            return;
+        }
+
         try {
             const submitData = {
                 firstName: previewFormData.firstName || 'Jane',
@@ -690,7 +809,11 @@ export default function B2BRegistrationForm({ onBack }) {
                                                                 <span style={{ color: '#8c9196', display: 'flex', alignItems: 'center' }}>
                                                                     {getFieldIcon(field.id)}
                                                                 </span>
-                                                                <span style={{ fontWeight: '500', color: '#303030' }}>
+                                                                <span 
+                                                                    onClick={() => handleRenameField(step.id, field.id, field.name)}
+                                                                    title="Click to rename field"
+                                                                    style={{ fontWeight: '500', color: '#303030', cursor: 'pointer', borderBottom: '1px dashed #c9cccf' }}
+                                                                >
                                                                     {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
                                                                 </span>
                                                             </InlineStack>
@@ -701,13 +824,15 @@ export default function B2BRegistrationForm({ onBack }) {
                                                                     title={field.required ? 'Make Optional' : 'Make Required'}
                                                                     onClick={() => handleToggleFieldRequired(step.id, field.id)}
                                                                     style={{
-                                                                        border: 'none',
-                                                                        background: 'none',
+                                                                        border: '1px solid #c9cccf',
+                                                                        borderRadius: '4px',
+                                                                        background: '#fff',
                                                                         cursor: 'pointer',
                                                                         color: field.required ? '#d82c0d' : '#8c9196',
-                                                                        padding: '2px',
+                                                                        padding: '2px 6px',
                                                                         fontSize: '11px',
-                                                                        fontWeight: 'bold'
+                                                                        fontWeight: 'bold',
+                                                                        marginRight: '4px'
                                                                     }}
                                                                 >
                                                                     {field.required ? 'Req' : 'Opt'}
@@ -871,72 +996,6 @@ export default function B2BRegistrationForm({ onBack }) {
                                 }} />
                             )}
 
-                            {/* Step Progress Connector Wizard */}
-                            <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'space-between', 
-                                padding: '0 10px',
-                                marginTop: deviceMode === 'mobile' ? '12px' : '0'
-                            }}>
-                                {steps.map((step, idx) => {
-                                    const isCurrent = activeStepIndex === idx;
-                                    const isCompleted = idx < activeStepIndex;
-                                    const isFuture = idx > activeStepIndex;
-                                    
-                                    return (
-                                        <React.Fragment key={step.id}>
-                                            <div 
-                                                onClick={() => setActiveEditSection(step.id)}
-                                                style={{ 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
-                                                    gap: '8px', 
-                                                    cursor: 'pointer',
-                                                    opacity: isFuture ? 0.5 : 1
-                                                }}
-                                            >
-                                                <div style={{
-                                                    width: '24px',
-                                                    height: '24px',
-                                                    borderRadius: '50%',
-                                                    backgroundColor: isCurrent ? '#1a1a1a' : (isCompleted ? '#008060' : 'transparent'),
-                                                    border: isCurrent ? '1.5px solid #1a1a1a' : (isCompleted ? '1.5px solid #008060' : '1.5px solid #8c9196'),
-                                                    color: isCurrent || isCompleted ? 'white' : '#8c9196',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    fontSize: '11px',
-                                                    fontWeight: 'bold'
-                                                }}>
-                                                    {isCompleted ? (
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                                        </svg>
-                                                    ) : idx + 1}
-                                                </div>
-                                                {deviceMode !== 'mobile' && (
-                                                    <Text variant="bodySm" fontWeight={isCurrent ? 'bold' : 'regular'}>
-                                                        {step.name}
-                                                    </Text>
-                                                )}
-                                            </div>
-
-                                            {/* Connector Line between steps */}
-                                            {idx < steps.length - 1 && (
-                                                <div style={{
-                                                    flex: 1,
-                                                    height: '2px',
-                                                    backgroundColor: idx < activeStepIndex ? '#008060' : '#dcdcdc',
-                                                    margin: '0 8px',
-                                                    minWidth: '20px'
-                                                }} />
-                                            )}
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </div>
-
                             {/* Preview Form Content Card */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 {/* Headings */}
@@ -978,9 +1037,10 @@ export default function B2BRegistrationForm({ onBack }) {
                                                             type="text" 
                                                             value={previewFormData.firstName}
                                                             onChange={(e) => handlePreviewChange('firstName', e.target.value)}
-                                                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.firstName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
                                                             placeholder="e.g. John"
                                                         />
+                                                        {previewErrors.firstName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.firstName}</div>}
                                                     </div>
                                                     {lastNameField && (
                                                         <div style={{ flex: 1 }}>
@@ -991,9 +1051,10 @@ export default function B2BRegistrationForm({ onBack }) {
                                                                 type="text" 
                                                                 value={previewFormData.lastName}
                                                                 onChange={(e) => handlePreviewChange('lastName', e.target.value)}
-                                                                style={{ width: '100%', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.lastName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
                                                                 placeholder="e.g. Doe"
                                                             />
+                                                            {previewErrors.lastName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.lastName}</div>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -1025,9 +1086,10 @@ export default function B2BRegistrationForm({ onBack }) {
                                                             placeholder="201-555-0123"
                                                             value={previewFormData.phone}
                                                             onChange={(e) => handlePreviewChange('phone', e.target.value)}
-                                                            style={{ flex: 1, padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                            style={{ flex: 1, padding: '10px 12px', border: `1px solid ${previewErrors.phone ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
                                                         />
                                                     </div>
+                                                    {previewErrors.phone && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.phone}</div>}
                                                 </div>
                                             );
                                         }
@@ -1040,15 +1102,20 @@ export default function B2BRegistrationForm({ onBack }) {
                                                         {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
                                                     </label>
                                                     <select 
-                                                        value={previewFormData.companyCountry}
-                                                        onChange={(e) => handlePreviewChange('companyCountry', e.target.value)}
-                                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
+                                                        value={previewSelectedCountryCode}
+                                                        onChange={(e) => {
+                                                            const isoCode = e.target.value;
+                                                            const countryName = countriesList.find(c => c.isoCode === isoCode)?.name || '';
+                                                            handlePreviewChange('companyCountry', countryName);
+                                                        }}
+                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.companyCountry ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
                                                     >
                                                         <option value="">Select country</option>
-                                                        <option value="United States">United States</option>
-                                                        <option value="Canada">Canada</option>
-                                                        <option value="United Kingdom">United Kingdom</option>
+                                                        {countriesList.map(country => (
+                                                            <option key={country.isoCode} value={country.isoCode}>{country.name}</option>
+                                                        ))}
                                                     </select>
+                                                    {previewErrors.companyCountry && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.companyCountry}</div>}
                                                 </div>
                                             );
                                         }
@@ -1089,6 +1156,33 @@ export default function B2BRegistrationForm({ onBack }) {
                                             );
                                         }
 
+                                        // Hide Province if no states
+                                        if (field.id === 'province' && statesList.length === 0) {
+                                            return null;
+                                        }
+
+                                        // Render Province Dropdown if states exist
+                                        if (field.id === 'province' && statesList.length > 0) {
+                                            return (
+                                                <div key={field.id}>
+                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                    </label>
+                                                    <select 
+                                                        value={previewFormData.province}
+                                                        onChange={(e) => handlePreviewChange('province', e.target.value)}
+                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.province ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
+                                                    >
+                                                        <option value="">Select province/state</option>
+                                                        {statesList.map(state => (
+                                                            <option key={state.isoCode} value={state.name}>{state.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {previewErrors.province && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.province}</div>}
+                                                </div>
+                                            );
+                                        }
+
                                         // Standard input / textarea
                                         const formVal = field.id === 'company_name' ? previewFormData.companyName :
                                                         field.id === 'company_address' ? previewFormData.companyAddress :
@@ -1123,7 +1217,7 @@ export default function B2BRegistrationForm({ onBack }) {
                                                         value={formVal}
                                                         onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
                                                         placeholder={`Enter ${field.name.toLowerCase()}`}
-                                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
+                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
                                                     />
                                                 ) : (
                                                     <input 
@@ -1131,45 +1225,19 @@ export default function B2BRegistrationForm({ onBack }) {
                                                         value={formVal}
                                                         onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
                                                         placeholder={`Enter ${field.name.toLowerCase()}`}
-                                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
                                                     />
                                                 )}
+                                                {previewErrors[stateKey] && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors[stateKey]}</div>}
                                             </div>
                                         );
                                     })}
                                 </div>
 
-                                {/* Wizard Footer Navigation Controls */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px', alignItems: 'center' }}>
+                                {/* Wizard Footer Navigation Controls Removed for single-page layout */}
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', alignItems: 'center' }}>
                                     <button 
-                                        onClick={() => {
-                                            if (activeStepIndex > 0) {
-                                                setActiveEditSection(steps[activeStepIndex - 1].id);
-                                            }
-                                        }}
-                                        disabled={activeStepIndex === 0}
-                                        style={{
-                                            padding: '10px 20px',
-                                            border: '1px solid #c9cccf',
-                                            borderRadius: '6px',
-                                            backgroundColor: 'white',
-                                            color: activeStepIndex === 0 ? '#c9cccf' : '#303030',
-                                            fontWeight: '600',
-                                            cursor: activeStepIndex === 0 ? 'not-allowed' : 'pointer',
-                                            fontSize: '14px'
-                                        }}
-                                    >
-                                        Previous
-                                    </button>
-                                    
-                                    <button 
-                                        onClick={() => {
-                                            if (activeStepIndex < steps.length - 1) {
-                                                setActiveEditSection(steps[activeStepIndex + 1].id);
-                                            } else {
-                                                handlePreviewSubmit();
-                                            }
-                                        }}
+                                        onClick={handlePreviewSubmit}
                                         style={{
                                             padding: '10px 24px',
                                             border: 'none',
@@ -1181,7 +1249,7 @@ export default function B2BRegistrationForm({ onBack }) {
                                             fontSize: '14px'
                                         }}
                                     >
-                                        {activeStepIndex === steps.length - 1 ? (submitBtnLabel || 'Submit') : 'Next'}
+                                        {submitBtnLabel || 'Submit'}
                                     </button>
                                 </div>
                             </div>

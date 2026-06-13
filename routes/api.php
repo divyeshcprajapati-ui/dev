@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\B2BRegistrationController;
+use App\Http\Controllers\API\LocationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,5 +36,7 @@ Route::get('/b2b/subscriptions', [B2BRegistrationController::class, 'getSubscrip
 Route::get('/b2b/notification-settings', [B2BRegistrationController::class, 'getNotificationSettings']);
 Route::post('/b2b/notification-settings/update', [B2BRegistrationController::class, 'updateNotificationSetting']);
 
-
-
+// Location fetching routes for registration form
+Route::get('/b2b/locations/countries', [LocationController::class, 'getCountries']);
+Route::get('/b2b/locations/states', [LocationController::class, 'getStates']);
+Route::get('/b2b/locations/cities', [LocationController::class, 'getCities']);

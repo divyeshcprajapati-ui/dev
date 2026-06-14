@@ -193,31 +193,17 @@ export default function CustomerListing() {
 
     return [
       <input type="checkbox" style={{ cursor: 'pointer' }} />,
-      contactName,
+      <span 
+        style={{ cursor: 'pointer', color: '#005bd3', fontWeight: '500', textDecoration: 'underline' }} 
+        onClick={() => navigate(`/customers/${sub.id}`)}
+      >
+        {contactName}
+      </span>,
       companyName,
       emailAddress,
       phoneNo,
       <Badge tone={badgeTone}>{displayStatus}</Badge>,
-      createdDate,
-      <InlineStack gap="100">
-        <Button 
-          size="micro" 
-          variant="primary" 
-          tone="success" 
-          disabled={rawStatus === 'Approved'} 
-          onClick={() => handleApprove(sub.id)}
-        >
-          Approve
-        </Button>
-        <Button 
-          size="micro" 
-          tone="critical" 
-          disabled={rawStatus === 'Rejected' || rawStatus === 'Failed'} 
-          onClick={() => handleReject(sub.id)}
-        >
-          Reject
-        </Button>
-      </InlineStack>
+      createdDate
     ];
   });
 
@@ -346,7 +332,7 @@ export default function CustomerListing() {
             ) : safeSubmissions.length > 0 ? (
               <>
                 <DataTable
-                  columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                  columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text']}
                   headings={[
                     <input type="checkbox" style={{ cursor: 'pointer' }} />,
                     'Customer',
@@ -354,8 +340,7 @@ export default function CustomerListing() {
                     'Email',
                     'Phone',
                     'Status',
-                    'Submitted at',
-                    'Actions'
+                    'Submitted at'
                   ]}
                   rows={submissionRows}
                 />

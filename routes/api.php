@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\B2BRegistrationController;
 use App\Http\Controllers\API\LocationController;
+use App\Http\Controllers\API\QuoteSettingsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,11 +27,16 @@ Route::post('/b2b/register', [B2BRegistrationController::class, 'register'])
 
 // B2B admin applications management routes
 Route::get('/b2b/applications', [B2BRegistrationController::class, 'index']);
+Route::get('/b2b/applications/{id}', [B2BRegistrationController::class, 'show']);
 Route::post('/b2b/applications/{id}/approve', [B2BRegistrationController::class, 'approve']);
 Route::post('/b2b/applications/{id}/reject', [B2BRegistrationController::class, 'reject']);
 
 // B2B admin subscriptions pricing management routes
 Route::get('/b2b/subscriptions', [B2BRegistrationController::class, 'getSubscriptions']);
+
+// B2B quote settings routes
+Route::get('/b2b/quote-settings', [QuoteSettingsController::class, 'getSettings']);
+Route::post('/b2b/quote-settings/update', [QuoteSettingsController::class, 'updateSettings']);
 
 // B2B notification settings routes
 Route::get('/b2b/notification-settings', [B2BRegistrationController::class, 'getNotificationSettings']);

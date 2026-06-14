@@ -60,6 +60,30 @@ class B2BRegistrationController extends Controller
     }
 
     /**
+     * Retrieve a single B2B application by ID.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function show($id): JsonResponse
+    {
+        try {
+            $application = B2BApplication::findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $application
+            ]);
+        } catch (Exception $e) {
+            Log::error("Error fetching B2B Application ID {$id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve application details.'
+            ], 404);
+        }
+    }
+
+    /**
      * Handle incoming B2B registration application requests.
      *
      * @param  \App\Http\Requests\B2BRegisterRequest  $request

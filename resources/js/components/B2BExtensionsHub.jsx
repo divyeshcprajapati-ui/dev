@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Page,
     Card,
@@ -17,6 +18,7 @@ import { SearchIcon, FilterIcon } from '@shopify/polaris-icons';
 import B2BRegistrationForm from './B2BRegistrationForm';
 
 export default function B2BExtensionsHub() {
+    const navigate = useNavigate();
     const [selectedTab, setSelectedTab] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentView, setCurrentView] = useState('hub');
@@ -149,23 +151,17 @@ export default function B2BExtensionsHub() {
             )
         },
         {
-            id: 'shopping-lists',
-            title: 'Shopping lists',
-            description: 'Allow clients to save re-usable purchase drafts and custom shopping lists.',
+            id: 'quote-requests',
+            title: 'Quote requests',
+            description: 'Manage your quote settings and review all quote submissions.',
             status: 'Inactive',
             isPlus: false,
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',
             mockIcon: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
-                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
-                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                    <div style={{ width: '14px', height: '8px', border: '1.5px solid #455a64', borderRadius: '2px' }} />
+                    <div style={{ width: '8px', height: '2px', backgroundColor: '#455a64' }} />
                 </div>
             )
         }
@@ -251,6 +247,8 @@ export default function B2BExtensionsHub() {
                                     onClick={() => {
                                         if (id === 'b2b-registration') {
                                             setCurrentView('b2b-registration');
+                                        } else if (id === 'quote-requests') {
+                                            navigate('/quotes');
                                         }
                                     }}
                                 >

@@ -49,6 +49,15 @@ export const registrationService = {
     },
 
     /**
+     * Get a single B2B application by ID.
+     * @param {number|string} id
+     * @returns {Promise<Object>}
+     */
+    getApplication: async (id) => {
+        return apiClient.get(`/b2b/applications/${id}`);
+    },
+
+    /**
      * Approve a B2B application by ID.
      * @param {number|string} id
      * @returns {Promise<Object>}

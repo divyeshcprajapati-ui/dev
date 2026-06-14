@@ -484,10 +484,6 @@ export default function B2BRegistrationForm({ onBack }) {
     // Submissions table rows (with safety fallback)
     const safeSubmissions = Array.isArray(submissions) ? submissions : [];
     const submissionRows = safeSubmissions.map((sub) => {
-        let statusTone = 'attention';
-        if (sub.status === 'Approved') statusTone = 'success';
-        if (sub.status === 'Rejected') statusTone = 'critical';
-
         // Format Date
         const dateStr = sub.created_at ? new Date(sub.created_at).toLocaleDateString() : '-';
         // Support both old simulated structure (sub.company, sub.contact) and database structure (sub.company_name, sub.first_name, sub.last_name)
@@ -498,45 +494,15 @@ export default function B2BRegistrationForm({ onBack }) {
         return [
             dateStr,
             <Text variant="bodyMd" fontWeight="semibold">{companyName}</Text>,
-            contactName,
+            <span 
+                style={{ cursor: 'pointer', color: '#005bd3', fontWeight: '500', textDecoration: 'underline' }} 
+                onClick={() => navigate(`/customers/${sub.id}`)}
+            >
+                {contactName}
+            </span>,
             sub.email,
             sub.phone || '-',
-            taxId || '-',
-            <Badge tone={statusTone}>{sub.status}</Badge>,
-            sub.status === 'Pending' ? (
-                <InlineStack gap="100">
-                    <button 
-                        onClick={() => handleApprove(sub.id)}
-                        style={{
-                            padding: '4px 8px',
-                            backgroundColor: '#e6f4ea',
-                            color: '#137333',
-                            border: '1px solid #137333',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Approve
-                    </button>
-                    <button 
-                        onClick={() => handleReject(sub.id)}
-                        style={{
-                            padding: '4px 8px',
-                            backgroundColor: '#fce8e6',
-                            color: '#c5221f',
-                            border: '1px solid #c5221f',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Reject
-                    </button>
-                </InlineStack>
-            ) : '-'
+            taxId || '-'
         ];
     });
 
@@ -1273,8 +1239,8 @@ export default function B2BRegistrationForm({ onBack }) {
                         <Card padding="0">
                             {safeSubmissions.length > 0 ? (
                                 <DataTable
-                                    columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
-                                    headings={['Date', 'Company', 'Contact Person', 'Email Address', 'Phone', 'Tax ID', 'Status', 'Actions']}
+                                    columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text']}
+                                    headings={['Date', 'Company', 'Contact Person', 'Email Address', 'Phone', 'Tax ID']}
                                     rows={submissionRows}
                                 />
                             ) : (

@@ -1,0 +1,152 @@
+<div class="b2b-registration-block-wrapper" style="background-color: {{ block.settings.bg_color }};">
+  <div class="b2b-registration-card">
+    <div class="b2b-registration-header">
+      <h2 style="color: {{ block.settings.text_color }};">{{ block.settings.title }}</h2>
+      <p style="color: {{ block.settings.text_color_subdued }};">{{ block.settings.description }}</p>
+    </div>
+
+    <form id="b2b-registration-form" enctype="multipart/form-data" novalidate>
+      <div id="general-error" class="b2b-error-banner hidden"></div>
+      <div id="general-success" class="b2b-success-banner hidden"></div>
+
+      <!-- Contact Info Section -->
+      <div class="b2b-form-section">
+        <div class="b2b-section-title">Contact Information</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="firstName">First Name *</label>
+            <input type="text" id="firstName" name="firstName" required>
+            <span class="field-error" id="error-firstName"></span>
+          </div>
+          <div class="form-group">
+            <label for="lastName">Last Name *</label>
+            <input type="text" id="lastName" name="lastName" required>
+            <span class="field-error" id="error-lastName"></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="email">Business Email *</label>
+            <input type="email" id="email" name="email" required>
+            <span class="field-error" id="error-email"></span>
+          </div>
+          <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone">
+            <span class="field-error" id="error-phone"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Company Info Section -->
+      <div class="b2b-form-section">
+        <div class="b2b-section-title">Company Details</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="companyName">Company Name *</label>
+            <input type="text" id="companyName" name="companyName" required>
+            <span class="field-error" id="error-companyName"></span>
+          </div>
+          <div class="form-group">
+            <label for="taxId">Tax ID / VAT Number</label>
+            <input type="text" id="taxId" name="taxId">
+            <span class="field-error" id="error-taxId"></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="website">Company Website</label>
+            <input type="url" id="website" name="website" placeholder="https://example.com">
+            <span class="field-error" id="error-website"></span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="address">Street Address *</label>
+          <input type="text" id="address" name="address" required>
+          <span class="field-error" id="error-address"></span>
+        </div>
+
+        <div class="form-row address-row">
+          <div class="form-group">
+            <label for="country">Country *</label>
+            <select id="country" name="country" required>
+              <option value="">Select Country</option>
+            </select>
+            <span class="field-error" id="error-country"></span>
+          </div>
+          <div class="form-group">
+            <label for="state">State / Province *</label>
+            <select id="state" name="state" required disabled>
+              <option value="">Select State</option>
+            </select>
+            <span class="field-error" id="error-state"></span>
+          </div>
+          <div class="form-group">
+            <label for="city">City *</label>
+            <select id="city" name="city" required disabled>
+              <option value="">Select City</option>
+            </select>
+            <span class="field-error" id="error-city"></span>
+          </div>
+          <div class="form-group">
+            <label for="zip">Zip / Postal Code *</label>
+            <input type="text" id="zip" name="zip" required>
+            <span class="field-error" id="error-zip"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Credentials Section -->
+      <div class="b2b-form-section">
+        <div class="b2b-section-title">Credentials & Notes</div>
+        <div class="form-group">
+          <label for="businessDocument">Business License / Document Upload</label>
+          <div class="file-upload-wrapper">
+            <input type="file" id="businessDocument" name="businessDocument" accept=".pdf,.png,.jpeg,.jpg">
+            <div class="file-upload-placeholder">
+              <span class="upload-icon">&#8679;</span>
+              <span class="upload-text">Choose file (PDF, PNG, JPG - Max 10MB)</span>
+            </div>
+          </div>
+          <span class="field-error" id="error-businessDocument"></span>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Additional Notes / Comments</label>
+          <textarea id="notes" name="notes" rows="4"></textarea>
+          <span class="field-error" id="error-notes"></span>
+        </div>
+      </div>
+
+      <!-- Submit Actions -->
+      <div class="b2b-form-actions">
+        <button type="submit" class="btn btn-primary submit-btn" style="background-color: {{ block.settings.primary_color }}; color: {{ block.settings.btn_text_color }}; width: 100%;">
+          <span class="btn-text">{{ block.settings.btn_label }}</span>
+          <span class="btn-spinner hidden"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "B2B Registration Form",
+  "target": "section",
+  "stylesheet": "b2b_registration.css",
+  "javascript": "b2b_registration.js",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "B2B registration" },
+    { "type": "textarea", "id": "description", "label": "Description", "default": "Fill out the details below to register your company account." },
+    { "type": "text", "id": "btn_label", "label": "Submit Button Label", "default": "Register" },
+    { "type": "color", "id": "bg_color", "label": "Background Color", "default": "#ffffff" },
+    { "type": "color", "id": "text_color", "label": "Heading Text Color", "default": "#111827" },
+    { "type": "color", "id": "text_color_subdued", "label": "Description Text Color", "default": "#6b7280" },
+    { "type": "color", "id": "primary_color", "label": "Primary Color", "default": "#1a1a1a" },
+    { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" }
+  ]
+}
+{% endschema %}

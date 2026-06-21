@@ -12,12 +12,29 @@ import {
   Box,
   InlineStack,
   Button,
+  Tabs,
+  IndexTable,
+  Badge,
+  useIndexResourceState
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { quoteService } from '../services/quoteService';
 
 export default function QuoteSettings() {
   const navigate = useNavigate();
+  
+  // Tabs state
+  const [selectedTab, setSelectedTab] = useState(0);
+  const handleTabChange = (selectedTabIndex) => {
+    setSelectedTab(selectedTabIndex);
+  };
+
+  const tabs = [
+    { id: 'settings', content: 'Quote Settings', panelID: 'quote-settings-content' },
+    { id: 'requests', content: 'Quote Requests', panelID: 'quote-requests-content' }
+  ];
+
+  // Settings State
   const [productPage, setProductPage] = useState(true);
   const [cartPage, setCartPage] = useState(false);
   const [b2bCustomers, setB2bCustomers] = useState(true);
@@ -27,6 +44,10 @@ export default function QuoteSettings() {
   const [formSelector, setFormSelector] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Quote Requests State
+  const [quotes, setQuotes] = useState([]);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -50,13 +71,33 @@ export default function QuoteSettings() {
     fetchSettings();
   }, []);
 
+  useEffect(() => {
+    if (selectedTab === 1) {
+      fetchQuotes();
+    }
+  }, [selectedTab]);
+
+  const fetchQuotes = async () => {
+    setLoadingQuotes(true);
+    try {
+      const res = await quoteService.getQuotes();
+      if (res && res.success && Array.isArray(res.data)) {
+        setQuotes(res.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch quotes", e);
+    } finally {
+      setLoadingQuotes(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       await quoteService.updateSettings({
         productPage: productPage,
         cartPage: cartPage,
-        b2bCustomers: b2bCustomers, // default static value check
+        b2bCustomers: b2bCustomers,
         notLoggedIn: notLoggedIn,
         emptyQuoteButton: emptyQuoteButton,
         addToCartSelector: addToCartSelector,
@@ -65,149 +106,210 @@ export default function QuoteSettings() {
       shopify.toast.show('Settings saved');
     } catch (err) {
       console.error("Failed to save settings", err);
-      // Fallback alert if shopify bridge isn't available
       alert("Settings saved locally (API error)");
     } finally {
       setSaving(false);
     }
   };
 
+  const resourceName = {
+    singular: 'quote',
+    plural: 'quotes',
+  };
+
+  const rowMarkup = quotes.map(
+    ({ id, quote_number, created_at, customer_name, company_name, status, subtotal }, index) => {
+      const statusTone = status === 'Approved' ? 'success' : status === 'Sent' ? 'info' : 'attention';
+      
+      return (
+        <IndexTable.Row
+          id={id}
+          key={id}
+          position={index}
+          onClick={() => navigate(`/quotes/${id}`)}
+        >
+          <IndexTable.Cell>
+            <Text variant="bodyMd" fontWeight="bold" as="span">
+              Quote {quote_number}
+            </Text>
+          </IndexTable.Cell>
+          <IndexTable.Cell>{new Date(created_at).toLocaleDateString()}</IndexTable.Cell>
+          <IndexTable.Cell>{customer_name}</IndexTable.Cell>
+          <IndexTable.Cell>{company_name}</IndexTable.Cell>
+          <IndexTable.Cell>
+            <Badge tone={statusTone}>{status}</Badge>
+          </IndexTable.Cell>
+          <IndexTable.Cell>
+            <Text variant="bodyMd" fontWeight="semibold" as="span">
+              ${parseFloat(subtotal).toFixed(2)} USD
+            </Text>
+          </IndexTable.Cell>
+        </IndexTable.Row>
+      );
+    }
+  );
+
   return (
     <Page
       backAction={{ content: 'Extensions', onAction: () => navigate(-1) }}
-      title="Quote Settings"
-      primaryAction={{
-        content: 'Save',
+      title="Quote Requests & Settings"
+      primaryAction={selectedTab === 0 ? {
+        content: 'Save Settings',
         onAction: handleSave,
         loading: saving,
         disabled: loading
-      }}
+      } : undefined}
     >
-      <Layout>
-        <Layout.Section>
-          <BlockStack gap="400">
-            <Card padding="400">
+      <BlockStack gap="400">
+        <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} />
+
+        {selectedTab === 0 ? (
+          <Layout>
+            <Layout.Section>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">
-                  Quote button display
-                </Text>
-                
-                <Banner tone="info" onDismiss={() => {}}>
-                  <p>To ensure the quote button display on your store, please verify these steps:</p>
-                  <List type="bullet">
-                    <List.Item>The customer's company location is associated with a B2B catalog.</List.Item>
-                    <List.Item>Customers are assigned to the role with the permission to request quotes.</List.Item>
-                    <List.Item>If you're using paid themes, please contact our team for additional configuration.</List.Item>
-                  </List>
-                </Banner>
+                <Card padding="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingMd" as="h2">
+                      Quote button display
+                    </Text>
+                    
+                    <Banner tone="info" onDismiss={() => {}}>
+                      <p>To ensure the quote button display on your store, please verify these steps:</p>
+                      <List type="bullet">
+                        <List.Item>The customer's company location is associated with a B2B catalog.</List.Item>
+                        <List.Item>Customers are assigned to the role with the permission to request quotes.</List.Item>
+                        <List.Item>If you're using paid themes, please contact our team for additional configuration.</List.Item>
+                      </List>
+                    </Banner>
 
-                <BlockStack gap="200">
-                  <Text variant="bodyMd" fontWeight="semibold">Display button on which page:</Text>
-                  <Checkbox
-                    label="Product page"
-                    checked={productPage}
-                    onChange={(val) => setProductPage(val)}
-                  />
-                  <Checkbox
-                    label="Cart page"
-                    checked={cartPage}
-                    onChange={(val) => setCartPage(val)}
-                  />
-                </BlockStack>
-
-                <BlockStack gap="200">
-                  <Text variant="bodyMd" fontWeight="semibold">Who will see this button:</Text>
-                  <Checkbox
-                    label="B2B customers (default)"
-                    checked={b2bCustomers}
-                    onChange={(val) => setB2bCustomers(val)}
-                    helpText="Customers who are assigned to specific B2B company locations"
-                    disabled // Appears uneditable or forced in screenshot? Will make it checked and disabled or just normal.
-                  />
-                  <Checkbox
-                    label="Not logged-in users"
-                    checked={notLoggedIn}
-                    onChange={(val) => setNotLoggedIn(val)}
-                    helpText="If enabled, they will be requested to register a B2B account inside quote request"
-                  />
-                </BlockStack>
-              </BlockStack>
-            </Card>
-
-            <Card padding="400">
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">
-                  Quote popup modal
-                </Text>
-                <Checkbox
-                  label="Show a button when quote is empty"
-                  checked={emptyQuoteButton}
-                  onChange={(val) => setEmptyQuoteButton(val)}
-                  helpText="If enabled, a button appears in the empty quote modal to guide buyers to a page."
-                />
-              </BlockStack>
-            </Card>
-
-            <Card padding="400">
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">
-                  Custom CSS selector
-                </Text>
-                <TextField
-                  label="Add to cart button selector"
-                  value={addToCartSelector}
-                  onChange={(val) => setAddToCartSelector(val)}
-                  autoComplete="off"
-                />
-                <TextField
-                  label="Form selector"
-                  value={formSelector}
-                  onChange={(val) => setFormSelector(val)}
-                  autoComplete="off"
-                />
-              </BlockStack>
-            </Card>
-          </BlockStack>
-        </Layout.Section>
-
-        <Layout.Section variant="oneThird">
-          <Card padding="0">
-            <div style={{ padding: '16px', borderBottom: '1px solid #e1e3e5' }}>
-              <Text variant="headingMd" as="h2">Preview</Text>
-            </div>
-            <div style={{ padding: '16px', backgroundColor: '#fafbfb' }}>
-              <Card padding="0">
-                <BlockStack gap="300">
-                  <div style={{
-                    width: '100%',
-                    height: '200px',
-                    backgroundColor: '#e1e3e5',
-                    backgroundImage: 'url("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png")',
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    borderTopLeftRadius: '8px',
-                    borderTopRightRadius: '8px'
-                  }}></div>
-                  <div style={{ padding: '16px' }}>
                     <BlockStack gap="200">
-                      <div style={{ width: '60%', height: '16px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
-                      <div style={{ width: '40%', height: '12px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
-                      <div style={{ width: '80%', height: '12px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
-                      
-                      <div style={{ marginTop: '16px' }}>
-                         <BlockStack gap="200">
-                           <Button fullWidth>Add to cart</Button>
-                           <Button fullWidth>Add to quote</Button>
-                         </BlockStack>
+                      <Text variant="bodyMd" fontWeight="semibold">Display button on which page:</Text>
+                      <Checkbox
+                        label="Product page"
+                        checked={productPage}
+                        onChange={(val) => setProductPage(val)}
+                      />
+                      <Checkbox
+                        label="Cart page"
+                        checked={cartPage}
+                        onChange={(val) => setCartPage(val)}
+                      />
+                    </BlockStack>
+
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Who will see this button:</Text>
+                      <Checkbox
+                        label="B2B customers (default)"
+                        checked={b2bCustomers}
+                        onChange={(val) => setB2bCustomers(val)}
+                        helpText="Customers who are assigned to specific B2B company locations"
+                        disabled
+                      />
+                      <Checkbox
+                        label="Not logged-in users"
+                        checked={notLoggedIn}
+                        onChange={(val) => setNotLoggedIn(val)}
+                        helpText="If enabled, they will be requested to register a B2B account inside quote request"
+                      />
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingMd" as="h2">
+                      Quote popup modal
+                    </Text>
+                    <Checkbox
+                      label="Show a button when quote is empty"
+                      checked={emptyQuoteButton}
+                      onChange={(val) => setEmptyQuoteButton(val)}
+                      helpText="If enabled, a button appears in the empty quote modal to guide buyers to a page."
+                    />
+                  </BlockStack>
+                </Card>
+
+                <Card padding="400">
+                  <BlockStack gap="400">
+                    <Text variant="headingMd" as="h2">
+                      Custom CSS selector
+                    </Text>
+                    <TextField
+                      label="Add to cart button selector"
+                      value={addToCartSelector}
+                      onChange={(val) => setAddToCartSelector(val)}
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="Form selector"
+                      value={formSelector}
+                      onChange={(val) => setFormSelector(val)}
+                      autoComplete="off"
+                    />
+                  </BlockStack>
+                </Card>
+              </BlockStack>
+            </Layout.Section>
+
+            <Layout.Section variant="oneThird">
+              <Card padding="0">
+                <div style={{ padding: '16px', borderBottom: '1px solid #e1e3e5' }}>
+                  <Text variant="headingMd" as="h2">Preview</Text>
+                </div>
+                <div style={{ padding: '16px', backgroundColor: '#fafbfb' }}>
+                  <Card padding="0">
+                    <BlockStack gap="300">
+                      <div style={{
+                        width: '100%',
+                        height: '200px',
+                        backgroundColor: '#e1e3e5',
+                        backgroundImage: 'url("https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png")',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        borderTopLeftRadius: '8px',
+                        borderTopRightRadius: '8px'
+                      }}></div>
+                      <div style={{ padding: '16px' }}>
+                        <BlockStack gap="200">
+                          <div style={{ width: '60%', height: '16px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
+                          <div style={{ width: '40%', height: '12px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
+                          <div style={{ width: '80%', height: '12px', backgroundColor: '#e1e3e5', borderRadius: '4px' }}></div>
+                          
+                          <div style={{ marginTop: '16px' }}>
+                             <BlockStack gap="200">
+                               <Button fullWidth>Add to cart</Button>
+                               <Button fullWidth>Add to quote</Button>
+                             </BlockStack>
+                          </div>
+                        </BlockStack>
                       </div>
                     </BlockStack>
-                  </div>
-                </BlockStack>
+                  </Card>
+                </div>
               </Card>
-            </div>
+            </Layout.Section>
+          </Layout>
+        ) : (
+          <Card padding="0">
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={quotes.length}
+              headings={[
+                { title: 'Quote ID' },
+                { title: 'Date' },
+                { title: 'Customer' },
+                { title: 'Company' },
+                { title: 'Status' },
+                { title: 'Total' },
+              ]}
+              selectable={false}
+              loading={loadingQuotes}
+            >
+              {rowMarkup}
+            </IndexTable>
           </Card>
-        </Layout.Section>
-      </Layout>
+        )}
+      </BlockStack>
     </Page>
   );
 }

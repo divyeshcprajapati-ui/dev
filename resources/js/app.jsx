@@ -14,6 +14,7 @@ const Notifications = lazy(() => import('./components/Notifications'));
 const SinglePageRegistration = lazy(() => import('./components/SinglePageRegistration'));
 const QuoteSettings = lazy(() => import('./components/QuoteSettings'));
 const CustomerDetail = lazy(() => import('./components/CustomerDetail'));
+const QuoteDetailAdmin = lazy(() => import('./components/QuoteDetailAdmin'));
 
 import { BrowserRouter, Routes, Route, Link as ReactRouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { NavMenu } from '@shopify/app-bridge-react';
@@ -152,6 +153,7 @@ function AdminRoutes() {
           <Route path="/" element={<B2BExtensionsHub />} />
           <Route path="/b2b-register" element={<B2BExtensionsHub />} />
           <Route path="/quotes" element={<QuoteSettings />} />
+          <Route path="/quotes/:id" element={<QuoteDetailAdmin />} />
           <Route path="/customers" element={<CustomerListing />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
           <Route path="/notifications" element={<Notifications />} />

@@ -36,5 +36,15 @@ class B2BApplication extends Model
         'business_document_path',
         'notes',
         'status',
+        'metafields',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'metafields' => 'array',
     ];
 }

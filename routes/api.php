@@ -43,6 +43,10 @@ Route::post('/b2b/quote-settings/update', [QuoteSettingsController::class, 'upda
 Route::get('/b2b/notification-settings', [B2BRegistrationController::class, 'getNotificationSettings']);
 Route::post('/b2b/notification-settings/update', [B2BRegistrationController::class, 'updateNotificationSetting']);
 
+// B2B registration form configuration routes
+Route::get('/b2b/form-config', [B2BRegistrationController::class, 'getFormConfig']);
+Route::post('/b2b/form-config/update', [B2BRegistrationController::class, 'updateFormConfig']);
+
 // B2B quotes CRUD routes
 Route::get('/b2b/quotes', [B2BQuoteController::class, 'index']);
 Route::get('/b2b/quotes/{id}', [B2BQuoteController::class, 'show']);

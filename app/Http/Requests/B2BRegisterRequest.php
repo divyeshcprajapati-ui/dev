@@ -39,6 +39,7 @@ class B2BRegisterRequest extends FormRequest
             'country'         => 'required|string|max:100',
             'businessDocument'=> 'nullable|file|mimes:pdf,png,jpeg,jpg|max:10240', // 10MB limit
             'notes'           => 'nullable|string|max:1000',
+            'metafields'      => 'nullable',
         ];
     }
 

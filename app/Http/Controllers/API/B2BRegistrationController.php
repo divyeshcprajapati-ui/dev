@@ -93,6 +93,10 @@ class B2BRegistrationController extends Controller
     {
         try {
             $validatedData = $request->validated();
+            Log::info('B2B Register Request received', [
+                'all' => $request->all(),
+                'validated' => $validatedData
+            ]);
 
             // Document upload handler
             $filePath = null;
@@ -101,6 +105,25 @@ class B2BRegistrationController extends Controller
                 // Store in secure 'b2b_documents' directory (private store)
                 $filePath = $file->store('b2b_documents', 'local');
             }
+
+            // Parse metafields if it's sent as a string (JSON) or array
+            $metafields = null;
+            Log::info('Raw metafields input: ' . (isset($validatedData['metafields']) ? gettype($validatedData['metafields']) : 'not set'), [
+                'metafields_raw' => $validatedData['metafields'] ?? null
+            ]);
+
+            if (isset($validatedData['metafields'])) {
+                if (is_array($validatedData['metafields'])) {
+                    $metafields = $validatedData['metafields'];
+                } elseif (is_string($validatedData['metafields'])) {
+                    $metafields = json_decode($validatedData['metafields'], true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        Log::error('Metafields JSON decode error: ' . json_last_error_msg());
+                    }
+                }
+            }
+
+            Log::info('Parsed metafields: ', ['metafields' => $metafields]);
 
             // Save B2B Application Data to database
             $application = B2BApplication::create([
@@ -118,6 +141,7 @@ class B2BRegistrationController extends Controller
                 'business_document_path' => $filePath,
                 'notes' => $validatedData['notes'] ?? null,
                 'status' => 'Pending',
+                'metafields' => $metafields,
             ]);
 
             Log::info('New B2B registration application saved', ['application_id' => $application->id]);
@@ -152,10 +176,120 @@ class B2BRegistrationController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
+    /**
+     * Approve a B2B application.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function approve($id): JsonResponse
     {
         try {
             $application = B2BApplication::findOrFail($id);
+
+            // Prepare B2B Company Creation Payload
+            $companyName = $application->company_name;
+            $firstName = $application->first_name;
+            $lastName = $application->last_name;
+            $email = $application->email;
+            $phone = $application->phone;
+            $address = $application->address;
+            $city = $application->city;
+            $zip = $application->zip;
+            $country = $application->country;
+            $province = $application->province;
+
+            $companyCreateInput = [
+                'company' => [
+                    'name' => $companyName,
+                ],
+                'companyContact' => [
+                    'firstName' => $firstName,
+                    'lastName' => $lastName,
+                    'email' => $email,
+                ],
+                'companyLocation' => [
+                    'name' => 'Main Office',
+                    'shippingAddress' => [
+                        'address1' => $address,
+                        'city' => $city,
+                        'zip' => $zip,
+                        'countryCode' => $this->getCountryCodeByName($country),
+                    ]
+                ]
+            ];
+
+            if ($phone) {
+                $companyCreateInput['companyContact']['phone'] = $phone;
+            }
+            
+            $provinceCode = $this->getProvinceCodeByName($province, $country);
+            if ($provinceCode) {
+                $companyCreateInput['companyLocation']['shippingAddress']['provinceCode'] = $provinceCode;
+            }
+
+            // GraphQL Mutation for Company, Contact and Location Creation
+            $companyCreateMutation = '
+            mutation companyCreate($input: CompanyCreateInput!) {
+              companyCreate(input: $input) {
+                company {
+                  id
+                  locations(first: 1) {
+                    edges {
+                      node {
+                        id
+                      }
+                    }
+                  }
+                  contacts(first: 1) {
+                    edges {
+                      node {
+                        id
+                      }
+                    }
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }';
+
+            Log::info("Attempting B2B Company Creation in Shopify for application ID: {$id}");
+            $res = $this->queryShopifyGraphQL($companyCreateMutation, ['input' => $companyCreateInput]);
+
+            $shopifyData = null;
+            if ($res['success']) {
+                $createData = $res['data']['companyCreate'];
+                if (!empty($createData['userErrors'])) {
+                    Log::warning('Shopify B2B Company creation returned validation errors', ['errors' => $createData['userErrors']]);
+                } else {
+                    $company = $createData['company'];
+                    $companyId = $company['id'];
+                    $locationId = $company['locations']['edges'][0]['node']['id'] ?? null;
+                    $contactId = $company['contacts']['edges'][0]['node']['id'] ?? null;
+
+                    Log::info("Shopify B2B Company created successfully", [
+                        'company_id' => $companyId,
+                        'location_id' => $locationId,
+                        'contact_id' => $contactId
+                    ]);
+
+                    // Assign Contact Role as "Location admin"
+                    if ($companyId && $locationId && $contactId) {
+                        $this->assignLocationAdminRole($companyId, $contactId, $locationId);
+                    }
+
+                    $shopifyData = [
+                        'shopify_company_id' => $companyId,
+                        'shopify_location_id' => $locationId,
+                        'shopify_contact_id' => $contactId
+                    ];
+                }
+            }
+
+            // Update local lead status
             $application->update(['status' => 'Approved']);
 
             Log::info("B2B Application Approved: ID {$id}");
@@ -163,7 +297,8 @@ class B2BRegistrationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Application has been approved successfully.',
-                'data' => $application
+                'data' => $application,
+                'shopify' => $shopifyData
             ]);
         } catch (Exception $e) {
             Log::error("Error approving B2B Application ID {$id}: " . $e->getMessage());
@@ -172,6 +307,182 @@ class B2BRegistrationController extends Controller
                 'message' => 'Failed to approve application.'
             ], 500);
         }
+    }
+
+    /**
+     * Helper to make GraphQL requests to Shopify Admin API
+     */
+    private function queryShopifyGraphQL(string $query, array $variables = []): array
+    {
+        $shopDomain = config('shopify.shop_domain');
+        $accessToken = config('shopify.access_token');
+        $apiVersion = config('shopify.api_version', '2026-04');
+
+        if (!$shopDomain || !$accessToken) {
+            Log::warning('Shopify shop domain or access token not configured. Skipping live API call.');
+            return ['success' => false, 'error' => 'Shopify API credentials not configured.'];
+        }
+
+        $url = "https://{$shopDomain}/admin/api/{$apiVersion}/graphql.json";
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'X-Shopify-Access-Token' => $accessToken,
+                'Content-Type' => 'application/json',
+            ])->post($url, [
+                'query' => $query,
+                'variables' => $variables,
+            ]);
+
+            if ($response->failed()) {
+                Log::error('Shopify GraphQL API request failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                return ['success' => false, 'error' => 'API Request Failed: ' . $response->body()];
+            }
+
+            $data = $response->json();
+            if (isset($data['errors'])) {
+                Log::error('Shopify GraphQL API returned errors', ['errors' => $data['errors']]);
+                return ['success' => false, 'errors' => $data['errors']];
+            }
+
+            return ['success' => true, 'data' => $data['data']];
+        } catch (Exception $e) {
+            Log::error('Shopify GraphQL API communication error: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Assign Location Admin role to the B2B contact
+     */
+    private function assignLocationAdminRole(string $companyId, string $contactId, string $locationId): void
+    {
+        // 1. Fetch available contact roles
+        $rolesQuery = '
+        query getCompanyRoles($companyId: ID!) {
+          node(id: $companyId) {
+            ... on Company {
+              contactRoles(first: 10) {
+                nodes {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }';
+
+        $res = $this->queryShopifyGraphQL($rolesQuery, ['companyId' => $companyId]);
+        if (!$res['success']) {
+            Log::error('Failed to fetch contact roles from Shopify');
+            return;
+        }
+
+        $roles = $res['data']['node']['contactRoles']['nodes'] ?? [];
+        $adminRoleId = null;
+        foreach ($roles as $role) {
+            if (strtolower($role['name']) === 'location admin') {
+                $adminRoleId = $role['id'];
+                break;
+            }
+        }
+
+        if (!$adminRoleId) {
+            Log::warning('Location admin role not found in Shopify roles list');
+            return;
+        }
+
+        // 2. Assign the role
+        $assignMutation = '
+        mutation companyContactAssignRole($companyContactId: ID!, $companyContactRoleId: ID!, $companyLocationId: ID!) {
+          companyContactAssignRole(
+            companyContactId: $companyContactId, 
+            companyContactRoleId: $companyContactRoleId, 
+            companyLocationId: $companyLocationId
+          ) {
+            companyContactRoleAssignment {
+              id
+              role {
+                name
+              }
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }';
+
+        $assignRes = $this->queryShopifyGraphQL($assignMutation, [
+            'companyContactId' => $contactId,
+            'companyContactRoleId' => $adminRoleId,
+            'companyLocationId' => $locationId
+        ]);
+
+        if ($assignRes['success']) {
+            $assignData = $assignRes['data']['companyContactAssignRole'];
+            if (!empty($assignData['userErrors'])) {
+                Log::error('Failed to assign Location admin role', ['errors' => $assignData['userErrors']]);
+            } else {
+                Log::info('Successfully assigned Location admin role to contact');
+            }
+        }
+    }
+
+    private function getCountryCodeByName(?string $name): string
+    {
+        if (!$name) return 'US';
+        $name = strtolower(trim($name));
+        $map = [
+            'united states' => 'US',
+            'united states of america' => 'US',
+            'us' => 'US',
+            'canada' => 'CA',
+            'ca' => 'CA',
+            'india' => 'IN',
+            'in' => 'IN',
+            'united kingdom' => 'GB',
+            'uk' => 'GB',
+            'gb' => 'GB'
+        ];
+        return $map[$name] ?? strtoupper(substr($name, 0, 2));
+    }
+
+    private function getProvinceCodeByName(?string $province, ?string $country): ?string
+    {
+        if (!$province) return null;
+        $province = strtolower(trim($province));
+        $country = strtolower(trim($country ?? ''));
+
+        if ($country === 'united states' || $country === 'us' || $country === 'united states of america') {
+            $states = [
+                'alabama' => 'AL', 'alaska' => 'AK', 'arizona' => 'AZ', 'arkansas' => 'AR', 'california' => 'CA',
+                'colorado' => 'CO', 'connecticut' => 'CT', 'delaware' => 'DE', 'florida' => 'FL', 'georgia' => 'GA',
+                'hawaii' => 'HI', 'idaho' => 'ID', 'illinois' => 'IL', 'indiana' => 'IN', 'iowa' => 'IA',
+                'kansas' => 'KS', 'kentucky' => 'KY', 'louisiana' => 'LA', 'maine' => 'ME', 'maryland' => 'MD',
+                'massachusetts' => 'MA', 'michigan' => 'MI', 'minnesota' => 'MN', 'mississippi' => 'MS', 'missouri' => 'MO',
+                'montana' => 'MT', 'nebraska' => 'NE', 'nevada' => 'NV', 'new hampshire' => 'NH', 'new jersey' => 'NJ',
+                'new mexico' => 'NM', 'new york' => 'NY', 'north carolina' => 'NC', 'north dakota' => 'ND', 'ohio' => 'OH',
+                'oklahoma' => 'OK', 'oregon' => 'OR', 'pennsylvania' => 'PA', 'rhode island' => 'RI', 'south carolina' => 'SC',
+                'south dakota' => 'SD', 'tennessee' => 'TN', 'texas' => 'TX', 'utah' => 'UT', 'vermont' => 'VT',
+                'virginia' => 'VA', 'washington' => 'WA', 'west virginia' => 'WV', 'wisconsin' => 'WI', 'wyoming' => 'WY'
+            ];
+            return $states[$province] ?? strtoupper(substr($province, 0, 2));
+        }
+
+        if ($country === 'canada' || $country === 'ca') {
+            $provinces = [
+                'ontario' => 'ON', 'quebec' => 'QC', 'nova scotia' => 'NS', 'new brunswick' => 'NB',
+                'manitoba' => 'MB', 'british columbia' => 'BC', 'prince edward island' => 'PE', 'saskatchewan' => 'SK',
+                'alberta' => 'AB', 'newfoundland and labrador' => 'NL', 'newfoundland' => 'NL', 'labrador' => 'NL'
+            ];
+            return $provinces[$province] ?? strtoupper(substr($province, 0, 2));
+        }
+
+        return strtoupper(substr($province, 0, 2));
     }
 
     /**
@@ -277,6 +588,58 @@ class B2BRegistrationController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update notification setting.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get registration form steps config
+     */
+    public function getFormConfig(): JsonResponse
+    {
+        try {
+            $setting = \App\Models\B2BQuoteSetting::where('setting_key', 'b2b_form_steps')->first();
+            $steps = null;
+            if ($setting && $setting->setting_value) {
+                $steps = json_decode($setting->setting_value, true);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $steps
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching form config: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve form configuration.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update registration form steps config
+     */
+    public function updateFormConfig(Request $request): JsonResponse
+    {
+        try {
+            $steps = $request->input('steps');
+            $val = is_array($steps) ? json_encode($steps) : $steps;
+
+            \App\Models\B2BQuoteSetting::updateOrCreate(
+                ['setting_key' => 'b2b_form_steps'],
+                ['setting_value' => $val]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Form configuration saved successfully.'
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error saving form config: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save form configuration.'
             ], 500);
         }
     }

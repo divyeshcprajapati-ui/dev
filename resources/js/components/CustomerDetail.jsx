@@ -248,6 +248,33 @@ export default function CustomerDetail() {
                        <Text variant="bodyMd" alignment="end">{customer.phone || '-'}</Text>
                     </div>
                   </BlockStack>
+
+                  {/* Shopify Metafields */}
+                  {customer.metafields && (typeof customer.metafields === 'object' || typeof customer.metafields === 'string') && (() => {
+                     let metafieldsObj = customer.metafields;
+                     if (typeof metafieldsObj === 'string') {
+                        try {
+                           metafieldsObj = JSON.parse(metafieldsObj);
+                        } catch (e) {
+                           metafieldsObj = null;
+                        }
+                     }
+                     if (!metafieldsObj || Object.keys(metafieldsObj).length === 0) return null;
+                     return (
+                        <BlockStack gap="200">
+                          <Text variant="headingSm" as="h3">Shopify Metafields</Text>
+                          {Object.entries(metafieldsObj).map(([fullKey, data]) => (
+                            <div key={fullKey} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderBottom: '1px solid #f1f2f3', paddingBottom: '8px' }}>
+                               <div>
+                                 <Text variant="bodyMd" fontWeight="semibold">{fullKey}</Text>
+                                 <Text variant="bodyXs" tone="subdued">{data.owner_type === 'company' ? 'Company Metafield' : 'Customer Metafield'} • {data.type}</Text>
+                               </div>
+                               <Text variant="bodyMd" alignment="end" style={{ wordBreak: 'break-all' }}>{String(data.value)}</Text>
+                            </div>
+                          ))}
+                        </BlockStack>
+                     );
+                  })()}
                 </BlockStack>
               </div>
             </Card>

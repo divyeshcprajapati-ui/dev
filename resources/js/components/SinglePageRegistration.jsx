@@ -47,23 +47,55 @@ export default function SinglePageRegistration() {
         document_upload: { label: 'Business License / Reseller Certificate', type: 'file', required: false, metafieldType: 'none' }
     };
 
-    const [fieldConfig, setFieldConfig] = useState(defaultFields);
+    const [steps, setSteps] = useState([
+        {
+            id: 'company-fields',
+            name: 'Company Section',
+            isOpen: true,
+            fields: [
+                { id: 'company_name', name: 'Company name', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'company_address', name: 'Company address', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'apartment', name: 'Appartment, suite, etc.', type: 'text', required: false, metafieldType: 'none' },
+                { id: 'company_country', name: 'Company country', type: 'select', required: true, metafieldType: 'none' },
+                { id: 'company_city', name: 'Company city', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'province', name: 'Province', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'zip', name: 'Zip code / Postal code', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'document_upload', name: 'Business License / Document Upload', type: 'file', required: false, metafieldType: 'none' },
+                { id: 'message', name: 'Message', type: 'textarea', required: false, metafieldType: 'none' },
+                { id: 'number', name: 'Number', type: 'number', required: false, metafieldType: 'none' }
+            ]
+        },
+        {
+            id: 'customer-fields',
+            name: 'Customer Section',
+            isOpen: true,
+            fields: [
+                { id: 'first_name', name: 'First name', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'last_name', name: 'Last name', type: 'text', required: true, metafieldType: 'none' },
+                { id: 'email', name: 'Your email', type: 'email', required: true, metafieldType: 'none' },
+                { id: 'phone', name: 'Your phone number', type: 'phone', required: true, metafieldType: 'none' }
+            ]
+        }
+    ]);
     
     const [formData, setFormData] = useState({
-        first_name: '',
-        last_name: '',
+        firstName: '',
+        lastName: '',
         email: '',
-        company_name: '',
-        tax_id: '',
-        phone: '',
-        company_address: '',
+        companyName: '',
+        companyAddress: '',
         apartment: '',
-        company_city: '',
+        companyCountry: '',
+        companyCity: '',
         province: '',
         zip: '',
-        company_country: '',
+        taxId: '',
         document_upload: '',
-        message: ''
+        message: '',
+        number: '',
+        phoneCode: 'US +1',
+        phone: ''
     });
 
     const [submitted, setSubmitted] = useState(false);
@@ -139,85 +171,306 @@ export default function SinglePageRegistration() {
     }, [selectedCountryCode, selectedStateCode]);
 
     useEffect(() => {
-        const savedConfig = localStorage.getItem('b2b_form_steps');
-        if (savedConfig) {
+        const loadConfig = async () => {
+            let parsedSteps = null;
             try {
-                const parsedSteps = JSON.parse(savedConfig);
-                const mergedConfig = { ...defaultFields };
+                const res = await registrationService.getFormConfig();
+                if (res && res.success && res.data) {
+                    parsedSteps = res.data;
+                }
+            } catch (e) {
+                console.error("Failed to load config from DB, checking local cache", e);
+            }
+
+            if (!parsedSteps) {
+                const savedConfig = localStorage.getItem('b2b_form_steps_v2');
+                if (savedConfig) {
+                    try {
+                        parsedSteps = JSON.parse(savedConfig);
+                    } catch (e) {}
+                }
+            }
+
+            if (parsedSteps) {
+                setSteps(parsedSteps);
                 const newFormData = { ...formData };
                 
                 parsedSteps.forEach(step => {
                     step.fields.forEach(f => {
-                        if (mergedConfig[f.id]) {
-                            mergedConfig[f.id].label = f.name;
-                            mergedConfig[f.id].required = f.required;
-                            mergedConfig[f.id].metafieldType = f.metafieldType || 'none';
-                        } else {
-                            mergedConfig[f.id] = { label: f.name, type: f.type, required: f.required, metafieldType: f.metafieldType || 'none' };
-                            if (!(f.id in newFormData)) {
-                                newFormData[f.id] = '';
-                            }
+                        const stateKey = f.id === 'company_name' ? 'companyName' :
+                                         f.id === 'company_address' ? 'companyAddress' :
+                                         f.id === 'apartment' ? 'apartment' :
+                                         f.id === 'company_city' ? 'companyCity' :
+                                         f.id === 'province' ? 'province' :
+                                         f.id === 'zip' ? 'zip' :
+                                         f.id === 'message' ? 'message' :
+                                         f.id === 'number' ? 'number' :
+                                         f.id === 'tax_id' ? 'taxId' :
+                                         f.id === 'email' ? 'email' :
+                                         f.id === 'first_name' ? 'firstName' :
+                                         f.id === 'last_name' ? 'lastName' :
+                                         f.id === 'company_country' ? 'companyCountry' : f.id;
+                        if (!(stateKey in newFormData)) {
+                            newFormData[stateKey] = '';
                         }
                     });
                 });
                 
-                setFieldConfig(mergedConfig);
                 setFormData(newFormData);
-            } catch (e) {
-                console.error("Could not load dynamic configuration", e);
             }
-        }
+        };
+
+        loadConfig();
     }, []);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: '' }));
+    // ZIP / Postal Code validation based on Province/State helper
+    const validateZipByProvince = (zip, country, province) => {
+        if (!zip || !country) return null;
+        const cleanZip = zip.trim();
+        const cleanCountry = country.toLowerCase();
+        const cleanProvince = (province || '').trim().toLowerCase();
+
+        if (cleanCountry === 'united states' || cleanCountry === 'us' || cleanCountry === 'united states of america') {
+            const statePrefixes = {
+                'al': ['35', '36'], 'alabama': ['35', '36'],
+                'ak': ['99'], 'alaska': ['99'],
+                'az': ['85', '86'], 'arizona': ['85', '86'],
+                'ar': ['71', '72'], 'arkansas': ['71', '72'],
+                'ca': ['90', '91', '92', '93', '94', '95', '96'], 'california': ['90', '91', '92', '93', '94', '95', '96'],
+                'co': ['80', '81'], 'colorado': ['80', '81'],
+                'ct': ['06'], 'connecticut': ['06'],
+                'de': ['19'], 'delaware': ['19'],
+                'dc': ['20'], 'district of columbia': ['20'],
+                'fl': ['32', '33', '34'], 'florida': ['32', '33', '34'],
+                'ga': ['30', '31'], 'georgia': ['30', '31'],
+                'hi': ['96'], 'hawaii': ['96'],
+                'id': ['83'], 'idaho': ['83'],
+                'il': ['60', '61', '62'], 'illinois': ['60', '61', '62'],
+                'in': ['46', '47'], 'indiana': ['46', '47'],
+                'ia': ['50', '51', '52'], 'iowa': ['50', '51', '52'],
+                'ks': ['66', '67'], 'kansas': ['66', '67'],
+                'ky': ['40', '41', '42'], 'kentucky': ['40', '41', '42'],
+                'la': ['70', '71'], 'louisiana': ['70', '71'],
+                'me': ['03', '04'], 'maine': ['03', '04'],
+                'md': ['20', '21'], 'maryland': ['20', '21'],
+                'ma': ['01', '02'], 'massachusetts': ['01', '02'],
+                'mi': ['48', '49'], 'michigan': ['48', '49'],
+                'mn': ['55', '56'], 'minnesota': ['55', '56'],
+                'ms': ['38', '39'], 'mississippi': ['38', '39'],
+                'mo': ['63', '64', '65'], 'missouri': ['63', '64', '65'],
+                'mt': ['59'], 'montana': ['59'],
+                'ne': ['68', '69'], 'nebraska': ['68', '69'],
+                'nv': ['88', '89'], 'nevada': ['88', '89'],
+                'nh': ['03'], 'new hampshire': ['03'],
+                'nj': ['07', '08'], 'new jersey': ['07', '08'],
+                'nm': ['87', '88'], 'new mexico': ['87', '88'],
+                'ny': ['09', '10', '11', '12', '13', '14'], 'new york': ['09', '10', '11', '12', '13', '14'],
+                'nc': ['27', '28'], 'north carolina': ['27', '28'],
+                'nd': ['58'], 'north dakota': ['58'],
+                'oh': ['43', '44', '45'], 'ohio': ['43', '44', '45'],
+                'ok': ['73', '74'], 'oklahoma': ['73', '74'],
+                'or': ['97'], 'oregon': ['97'],
+                'pa': ['15', '16', '17', '18', '19'], 'pennsylvania': ['15', '16', '17', '18', '19'],
+                'ri': ['02'], 'rhode island': ['02'],
+                'sc': ['29'], 'south carolina': ['29'],
+                'sd': ['57'], 'south dakota': ['57'],
+                'tn': ['37', '38', '39'], 'tennessee': ['37', '38', '39'],
+                'tx': ['75', '76', '77', '78', '79'], 'texas': ['75', '76', '77', '78', '79'],
+                'ut': ['84'], 'utah': ['84'],
+                'vt': ['05'], 'vermont': ['05'],
+                'va': ['22', '23', '24'], 'virginia': ['22', '23', '24'],
+                'wa': ['98', '99'], 'washington': ['98', '99'],
+                'wv': ['24', '25', '26'], 'west virginia': ['24', '25', '26'],
+                'wi': ['53', '54'], 'wisconsin': ['53', '54'],
+                'wy': ['82', '83'], 'wyoming': ['82', '83']
+            };
+
+            const expectedPrefixes = statePrefixes[cleanProvince];
+            if (expectedPrefixes) {
+                const hasMatch = expectedPrefixes.some(prefix => cleanZip.startsWith(prefix));
+                if (!hasMatch) {
+                    return `ZIP code prefix does not match selected province/state ${province}. Expected prefix like ${expectedPrefixes.join(', ')}`;
+                }
+            }
+        } else if (cleanCountry === 'canada' || cleanCountry === 'ca') {
+            const provinceLetters = {
+                'nl': 'a', 'newfoundland': 'a', 'labrador': 'a', 'newfoundland and labrador': 'a',
+                'ns': 'b', 'nova scotia': 'b',
+                'pe': 'c', 'prince edward island': 'c',
+                'nb': 'e', 'new brunswick': 'e',
+                'qc': 'ghj', 'quebec': 'ghj',
+                'on': 'klmnp', 'ontario': 'klmnp',
+                'mb': 'r', 'manitoba': 'r',
+                'sk': 's', 'saskatchewan': 's',
+                'ab': 't', 'alberta': 't',
+                'bc': 'v', 'british columbia': 'v',
+                'nt': 'x', 'northwest territories': 'x',
+                'nu': 'x', 'nunavut': 'x',
+                'yt': 'y', 'yukon': 'y'
+            };
+
+            const expectedLetters = provinceLetters[cleanProvince];
+            if (expectedLetters) {
+                const firstChar = cleanZip.charAt(0).toLowerCase();
+                if (!expectedLetters.includes(firstChar)) {
+                    return `Postal code does not match selected Canadian province ${province}. Expected first letter to be one of: ${expectedLetters.toUpperCase()}`;
+                }
+            }
+        } else if (cleanCountry === 'india' || cleanCountry === 'in') {
+            const indiaPrefixes = {
+                'dl': ['11'], 'delhi': ['11'],
+                'hr': ['12', '13'], 'haryana': ['12', '13'],
+                'pb': ['14', '15', '16'], 'punjab': ['14', '15', '16'],
+                'hp': ['17'], 'himachal pradesh': ['17'],
+                'jk': ['19'], 'jammu & kashmir': ['19'], 'jammu and kashmir': ['19'],
+                'up': ['20', '21', '22', '23', '24', '25', '26', '27', '28'], 'uttar pradesh': ['20', '21', '22', '23', '24', '25', '26', '27', '28'],
+                'ut': ['24', '25', '26'], 'uttarakhand': ['24', '25', '26'],
+                'rj': ['30', '31', '32', '33', '34'], 'rajasthan': ['30', '31', '32', '33', '34'],
+                'gj': ['36', '37', '38', '39'], 'gujarat': ['36', '37', '38', '39'],
+                'mh': ['40', '41', '42', '43', '44'], 'maharashtra': ['40', '41', '42', '43', '44'],
+                'mp': ['45', '46', '47', '48'], 'madhya pradesh': ['45', '46', '47', '48'],
+                'cg': ['49'], 'chhattisgarh': ['49'],
+                'ap': ['50', '51', '52', '53'], 'andhra pradesh': ['50', '51', '52', '53'],
+                'tg': ['50'], 'telangana': ['50'],
+                'ka': ['56', '57', '58', '59'], 'karnataka': ['56', '57', '58', '59'],
+                'tn': ['60', '61', '62', '63', '64'], 'tamil nadu': ['60', '61', '62', '63', '64'],
+                'kl': ['67', '68', '69'], 'kerala': ['67', '68', '69'],
+                'wb': ['70', '71', '72', '73', '74'], 'west bengal': ['70', '71', '72', '73', '74'],
+                'or': ['75', '76', '77'], 'odisha': ['75', '76', '77'],
+                'br': ['80', '81', '82', '83', '84', '85'], 'bihar': ['80', '81', '82', '83', '84', '85'],
+                'jh': ['80', '81', '82', '83', '84', '85'], 'jharkhand': ['80', '81', '82', '83', '84', '85']
+            };
+
+            const expectedPrefixes = indiaPrefixes[cleanProvince];
+            if (expectedPrefixes) {
+                const hasMatch = expectedPrefixes.some(prefix => cleanZip.startsWith(prefix));
+                if (!hasMatch) {
+                    return `Pincode does not match selected state ${province}. Expected prefix like ${expectedPrefixes.join(', ')}`;
+                }
+            }
         }
+        return null;
     };
 
-    const handleCountryChange = (e) => {
-        const isoCode = e.target.value;
-        setSelectedCountryCode(isoCode);
-        const countryName = countriesList.find(c => c.isoCode === isoCode)?.name || '';
-        setFormData(prev => ({ ...prev, company_country: countryName, province: '', company_city: '' }));
-        setSelectedStateCode('');
-        if (errors.company_country) setErrors(prev => ({ ...prev, company_country: '' }));
-    };
+    const handleFormChange = (key, val) => {
+        // Prevent typing non-numeric in number fields
+        const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
+        const field = allFields.find(f => {
+            const stateKey = f.id === 'company_name' ? 'companyName' :
+                             f.id === 'company_address' ? 'companyAddress' :
+                             f.id === 'apartment' ? 'apartment' :
+                             f.id === 'company_city' ? 'companyCity' :
+                             f.id === 'province' ? 'province' :
+                             f.id === 'zip' ? 'zip' :
+                             f.id === 'message' ? 'message' :
+                             f.id === 'number' ? 'number' :
+                             f.id === 'tax_id' ? 'taxId' :
+                             f.id === 'email' ? 'email' :
+                             f.id === 'first_name' ? 'firstName' :
+                             f.id === 'last_name' ? 'lastName' :
+                             f.id === 'company_country' ? 'companyCountry' : f.id;
+            return stateKey === key;
+        });
 
-    const handleStateChange = (e) => {
-        const isoCode = e.target.value;
-        setSelectedStateCode(isoCode);
-        const stateName = statesList.find(s => s.isoCode === isoCode)?.name || '';
-        setFormData(prev => ({ ...prev, province: stateName, company_city: '' }));
-        if (errors.province) setErrors(prev => ({ ...prev, province: '' }));
-    };
+        if (field && field.type === 'number') {
+            val = val.replace(/[^0-9.]/g, '');
+            const parts = val.split('.');
+            if (parts.length > 2) {
+                val = parts[0] + '.' + parts.slice(1).join('');
+            }
+        }
 
-    const handleCityChange = (e) => {
-        const cityName = e.target.value;
-        setFormData(prev => ({ ...prev, company_city: cityName }));
-        if (errors.company_city) setErrors(prev => ({ ...prev, company_city: '' }));
+        setFormData(prev => ({ ...prev, [key]: val }));
+        if (errors[key]) {
+            setErrors(prev => ({ ...prev, [key]: '' }));
+        }
+
+        // Special handling for Country to load states and prefix
+        if (key === 'companyCountry') {
+            const country = countriesList.find(c => c.name === val || c.isoCode === val);
+            setSelectedCountryCode(country ? country.isoCode : '');
+            
+            let phoneCodeVal = 'US +1';
+            if (country) {
+                const prefix = country.phonecode.startsWith('+') ? country.phonecode : `+${country.phonecode}`;
+                phoneCodeVal = `${country.isoCode} ${prefix}`;
+            }
+
+            setFormData(prev => ({ 
+                ...prev, 
+                province: '', 
+                companyCity: '',
+                phoneCode: phoneCodeVal
+            }));
+            setSelectedStateCode('');
+        }
     };
 
     const validate = () => {
         const newErrors = {};
-        Object.keys(fieldConfig).forEach(key => {
-            const config = fieldConfig[key];
-            if (config.required && !formData[key]?.trim() && config.type !== 'file') {
-                if (key === 'province' && statesList.length === 0) {
+        const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
+        
+        allFields.forEach(field => {
+            const stateKey = field.id === 'company_name' ? 'companyName' :
+                             field.id === 'company_address' ? 'companyAddress' :
+                             field.id === 'apartment' ? 'apartment' :
+                             field.id === 'company_city' ? 'companyCity' :
+                             field.id === 'province' ? 'province' :
+                             field.id === 'zip' ? 'zip' :
+                             field.id === 'message' ? 'message' :
+                             field.id === 'number' ? 'number' :
+                             field.id === 'tax_id' ? 'taxId' :
+                             field.id === 'email' ? 'email' :
+                             field.id === 'first_name' ? 'firstName' :
+                             field.id === 'last_name' ? 'lastName' :
+                             field.id === 'company_country' ? 'companyCountry' : field.id;
+
+            const val = formData[stateKey];
+            if (field.required && (!val || (typeof val === 'string' && !val.trim())) && field.type !== 'file') {
+                if (stateKey === 'province' && statesList.length === 0) {
                     // Do not require province if country has no states
                 } else {
-                    newErrors[key] = `${config.label} is required`;
+                    newErrors[stateKey] = `${field.name} is required`;
                 }
-            }
-            if (key === 'email' && formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+            } else if (stateKey === 'email' && val && !/\S+@\S+\.\S+/.test(val)) {
                 newErrors.email = 'Please enter a valid email address';
-            }
-            if (key === 'phone' && formData.phone) {
+            } else if (stateKey === 'phone' && val) {
                 const phoneRegex = /^[0-9\+\-\s\(\)]+$/;
-                if (!phoneRegex.test(formData.phone)) {
-                    newErrors.phone = 'Phone number can only contain numbers and basic symbols (+, -, (, ))';
+                if (!phoneRegex.test(val)) {
+                    newErrors.phone = 'Invalid phone number format';
+                }
+            } else if (stateKey === 'zip' && val) {
+                const zipVal = val.trim();
+                const country = formData.companyCountry || '';
+                if (country.toLowerCase() === 'united states' || country.toLowerCase() === 'us' || country.toLowerCase() === 'united states of america') {
+                    if (!/^\d{5}(-\d{4})?$/.test(zipVal)) {
+                        newErrors.zip = 'US zip code must be 5 digits (e.g. 12345) or 5+4 digits (e.g. 12345-6789)';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'canada' || country.toLowerCase() === 'ca') {
+                    if (!/^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(zipVal)) {
+                        newErrors.zip = 'Canada postal code must be in A1A 1A1 format';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'india' || country.toLowerCase() === 'in') {
+                    if (!/^\d{6}$/.test(zipVal)) {
+                        newErrors.zip = 'India pincode must be 6 digits';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'united kingdom' || country.toLowerCase() === 'uk' || country.toLowerCase() === 'gb') {
+                    if (!/^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i.test(zipVal)) {
+                        newErrors.zip = 'Invalid UK postcode';
+                    }
+                }
+            } else if (field.type === 'number' && val) {
+                if (isNaN(val) || isNaN(parseFloat(val))) {
+                    newErrors[stateKey] = `${field.name} must be a valid number`;
                 }
             }
         });
@@ -236,22 +489,50 @@ export default function SinglePageRegistration() {
 
         setLoading(true);
         try {
-            const submitData = { ...formData };
-            delete submitData.document_upload; 
-
-            const customerMetafields = {};
-            const companyMetafields = {};
-
-            Object.keys(fieldConfig).forEach(key => {
-                if (fieldConfig[key].metafieldType === 'customer') {
-                    customerMetafields[key] = submitData[key];
-                } else if (fieldConfig[key].metafieldType === 'company') {
-                    companyMetafields[key] = submitData[key];
+            // Build metafields payload
+            const metafieldsPayload = {};
+            const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
+            allFields.forEach(field => {
+                const stateKey = field.id === 'company_name' ? 'companyName' :
+                                 field.id === 'company_address' ? 'companyAddress' :
+                                 field.id === 'apartment' ? 'apartment' :
+                                 field.id === 'company_city' ? 'companyCity' :
+                                 field.id === 'province' ? 'province' :
+                                 field.id === 'zip' ? 'zip' :
+                                 field.id === 'message' ? 'message' :
+                                 field.id === 'number' ? 'number' :
+                                 field.id === 'tax_id' ? 'taxId' :
+                                 field.id === 'email' ? 'email' :
+                                 field.id === 'first_name' ? 'firstName' :
+                                 field.id === 'last_name' ? 'lastName' :
+                                 field.id === 'company_country' ? 'companyCountry' : field.id;
+                const val = formData[stateKey];
+                
+                if (field.metafieldType && field.metafieldType !== 'none' && val !== undefined && val !== null && val !== '') {
+                    const ns = field.metafieldNamespace || 'custom';
+                    const mKey = field.metafieldKey || field.id;
+                    metafieldsPayload[`${ns}.${mKey}`] = {
+                        value: val,
+                        owner_type: field.metafieldType,
+                        type: field.metafieldValueType || 'single_line_text_field'
+                    };
                 }
             });
 
-            if (Object.keys(customerMetafields).length > 0) submitData.customer_metafields = JSON.stringify(customerMetafields);
-            if (Object.keys(companyMetafields).length > 0) submitData.company_metafields = JSON.stringify(companyMetafields);
+            const submitData = {
+                firstName: formData.firstName || '',
+                lastName: formData.lastName || '',
+                email: formData.email || '',
+                companyName: formData.companyName || '',
+                address: formData.companyAddress || '',
+                city: formData.companyCity || '',
+                zip: formData.zip || '',
+                country: formData.companyCountry || '',
+                taxId: formData.taxId || '',
+                phone: formData.phone ? `${formData.phoneCode} ${formData.phone}`.trim() : '',
+                notes: formData.message || '',
+                metafields: metafieldsPayload
+            };
 
             const response = await registrationService.submitRegistration(submitData, fileObject);
             
@@ -280,22 +561,72 @@ export default function SinglePageRegistration() {
 
     const handleBlur = (e) => {
         const { name, value } = e.target;
-        const config = fieldConfig[name];
-        if (!config) return;
+        const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
+        const field = allFields.find(f => {
+            const stateKey = f.id === 'company_name' ? 'companyName' :
+                             f.id === 'company_address' ? 'companyAddress' :
+                             f.id === 'apartment' ? 'apartment' :
+                             f.id === 'company_city' ? 'companyCity' :
+                             f.id === 'province' ? 'province' :
+                             f.id === 'zip' ? 'zip' :
+                             f.id === 'message' ? 'message' :
+                             f.id === 'number' ? 'number' :
+                             f.id === 'tax_id' ? 'taxId' :
+                             f.id === 'email' ? 'email' :
+                             f.id === 'first_name' ? 'firstName' :
+                             f.id === 'last_name' ? 'lastName' :
+                             f.id === 'company_country' ? 'companyCountry' : f.id;
+            return stateKey === name;
+        });
+
+        if (!field) return;
 
         let error = '';
-        if (config.required && !value.trim() && config.type !== 'file') {
+        if (field.required && (!value || (typeof value === 'string' && !value.trim())) && field.type !== 'file') {
             if (name === 'province' && statesList.length === 0) {
                 // Do not require province if country has no states
             } else {
-                error = `${config.label} is required`;
+                error = `${field.name} is required`;
             }
         } else if (name === 'email' && value && !/\S+@\S+\.\S+/.test(value)) {
             error = 'Please enter a valid email address';
         } else if (name === 'phone' && value) {
             const phoneRegex = /^[0-9\+\-\s\(\)]+$/;
             if (!phoneRegex.test(value)) {
-                error = 'Phone number can only contain numbers and basic symbols (+, -, (, ))';
+                error = 'Invalid phone number format';
+            }
+        } else if (name === 'zip' && value) {
+            const zipVal = value.trim();
+            const country = formData.companyCountry || '';
+            if (country.toLowerCase() === 'united states' || country.toLowerCase() === 'us' || country.toLowerCase() === 'united states of america') {
+                if (!/^\d{5}(-\d{4})?$/.test(zipVal)) {
+                    error = 'US zip code must be 5 digits (e.g. 12345) or 5+4 digits (e.g. 12345-6789)';
+                } else {
+                    const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                    if (zipErr) error = zipErr;
+                }
+            } else if (country.toLowerCase() === 'canada' || country.toLowerCase() === 'ca') {
+                if (!/^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(zipVal)) {
+                    error = 'Canada postal code must be in A1A 1A1 format';
+                } else {
+                    const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                    if (zipErr) error = zipErr;
+                }
+            } else if (country.toLowerCase() === 'india' || country.toLowerCase() === 'in') {
+                if (!/^\d{6}$/.test(zipVal)) {
+                    error = 'India pincode must be 6 digits';
+                } else {
+                    const zipErr = validateZipByProvince(zipVal, country, formData.province);
+                    if (zipErr) error = zipErr;
+                }
+            } else if (country.toLowerCase() === 'united kingdom' || country.toLowerCase() === 'uk' || country.toLowerCase() === 'gb') {
+                if (!/^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i.test(zipVal)) {
+                    error = 'Invalid UK postcode';
+                }
+            }
+        } else if (field.type === 'number' && value) {
+            if (isNaN(value) || isNaN(parseFloat(value))) {
+                error = `${field.name} must be a valid number`;
             }
         }
 
@@ -380,7 +711,6 @@ export default function SinglePageRegistration() {
         }
     };
 
-    const extraFields = Object.keys(fieldConfig).filter(key => !Object.keys(defaultFields).includes(key));
 
     return (
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#fafafa', fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -493,7 +823,7 @@ export default function SinglePageRegistration() {
                                 </div>
                                 <h2 style={{ fontSize: '28px', fontWeight: '800', color: '#111827', marginBottom: '16px' }}>Application Received</h2>
                                 <p style={{ fontSize: '16px', color: '#4b5563', lineHeight: '1.6', marginBottom: '32px' }}>
-                                    Thank you for applying. We are reviewing your application for <strong>{formData.company_name}</strong>.
+                                    Thank you for applying. We are reviewing your application for <strong>{formData.companyName}</strong>.
                                 </p>
                             </div>
                         ) : (
@@ -510,37 +840,251 @@ export default function SinglePageRegistration() {
                                         </div>
                                     )}
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div>
-                                            <label style={getLabelStyle()}>{fieldConfig.first_name?.label} *</label>
-                                            <input type="text" name="first_name" value={formData.first_name} onChange={handleChange} onBlur={handleBlur} style={getInputStyle(errors.first_name)} />
-                                            {errors.first_name && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.first_name}</span>}
-                                        </div>
-                                        <div>
-                                            <label style={getLabelStyle()}>{fieldConfig.last_name?.label} *</label>
-                                            <input type="text" name="last_name" value={formData.last_name} onChange={handleChange} onBlur={handleBlur} style={getInputStyle(errors.last_name)} />
-                                            {errors.last_name && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.last_name}</span>}
-                                        </div>
-                                    </div>
+                                    {steps.map(step => (
+                                        <div key={step.id} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            <div style={{ paddingBottom: '4px', borderBottom: '1px solid #ebebeb', marginBottom: '8px' }}>
+                                                <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+                                                    {step.name}
+                                                </h3>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                                {step.fields.map(field => {
+                                                    const stateKey = field.id === 'company_name' ? 'companyName' :
+                                                                     field.id === 'company_address' ? 'companyAddress' :
+                                                                     field.id === 'apartment' ? 'apartment' :
+                                                                     field.id === 'company_city' ? 'companyCity' :
+                                                                     field.id === 'province' ? 'province' :
+                                                                     field.id === 'zip' ? 'zip' :
+                                                                     field.id === 'message' ? 'message' :
+                                                                     field.id === 'number' ? 'number' :
+                                                                     field.id === 'tax_id' ? 'taxId' :
+                                                                     field.id === 'email' ? 'email' :
+                                                                     field.id === 'first_name' ? 'firstName' :
+                                                                     field.id === 'last_name' ? 'lastName' :
+                                                                     field.id === 'company_country' ? 'companyCountry' : field.id;
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div>
-                                            <label style={getLabelStyle()}>{fieldConfig.email?.label} *</label>
-                                            <input type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} style={getInputStyle(errors.email)} />
-                                            {errors.email && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.email}</span>}
-                                        </div>
-                                        <div>
-                                            <label style={getLabelStyle()}>{fieldConfig.phone?.label}</label>
-                                            <input type="text" name="phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur} style={getInputStyle(errors.phone)} />
-                                            {errors.phone && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.phone}</span>}
-                                        </div>
-                                    </div>
+                                                    const val = formData[stateKey] || '';
 
-                                    <div>
-                                        <label style={getLabelStyle()}>{fieldConfig.company_name?.label} *</label>
-                                        <input type="text" name="company_name" value={formData.company_name} onChange={handleChange} onBlur={handleBlur} style={getInputStyle(errors.company_name)} />
-                                        {errors.company_name && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.company_name}</span>}
-                                    </div>
+                                                    // Custom render for First Name / Last Name side-by-side
+                                                    if (field.id === 'first_name') {
+                                                        const lastNameField = step.fields.find(f => f.id === 'last_name');
+                                                        return (
+                                                            <div key={field.id} style={{ display: 'flex', gap: '16px' }}>
+                                                                <div style={{ flex: 1 }}>
+                                                                    <label style={getLabelStyle()}>
+                                                                        {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                    </label>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        name="firstName"
+                                                                        value={formData.firstName}
+                                                                        onChange={(e) => handleFormChange('firstName', e.target.value)}
+                                                                        onBlur={handleBlur}
+                                                                        style={getInputStyle(errors.firstName)}
+                                                                        placeholder="e.g. John"
+                                                                    />
+                                                                    {errors.firstName && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.firstName}</span>}
+                                                                </div>
+                                                                {lastNameField && (
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <label style={getLabelStyle()}>
+                                                                            {lastNameField.name} {lastNameField.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                        </label>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            name="lastName"
+                                                                            value={formData.lastName}
+                                                                            onChange={(e) => handleFormChange('lastName', e.target.value)}
+                                                                            onBlur={handleBlur}
+                                                                            style={getInputStyle(errors.lastName)}
+                                                                            placeholder="e.g. Doe"
+                                                                        />
+                                                                        {errors.lastName && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.lastName}</span>}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (field.id === 'last_name') return null;
+
+                                                    // Custom phone with prefix dropdown
+                                                    if (field.id === 'phone') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={getLabelStyle()}>
+                                                                    {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                </label>
+                                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                                    <select 
+                                                                        value={formData.phoneCode}
+                                                                        onChange={(e) => handleFormChange('phoneCode', e.target.value)}
+                                                                        style={{ padding: '12px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: '#fff', fontSize: '15px', width: '110px', cursor: 'pointer', outline: 'none' }}
+                                                                    >
+                                                                        {countriesList.length > 0 ? (
+                                                                            countriesList.map(country => {
+                                                                                const prefix = country.phonecode.startsWith('+') ? country.phonecode : `+${country.phonecode}`;
+                                                                                const optionVal = `${country.isoCode} ${prefix}`;
+                                                                                return (
+                                                                                    <option key={country.isoCode} value={optionVal}>
+                                                                                        {country.isoCode} {prefix}
+                                                                                    </option>
+                                                                                );
+                                                                            })
+                                                                        ) : (
+                                                                            <>
+                                                                                <option value="US +1">US +1</option>
+                                                                                <option value="CA +1">CA +1</option>
+                                                                                <option value="UK +44">UK +44</option>
+                                                                            </>
+                                                                        )}
+                                                                    </select>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        name="phone"
+                                                                        placeholder="201-555-0123"
+                                                                        value={formData.phone}
+                                                                        onChange={(e) => handleFormChange('phone', e.target.value)}
+                                                                        onBlur={handleBlur}
+                                                                        style={{ ...getInputStyle(errors.phone), flex: 1 }}
+                                                                    />
+                                                                </div>
+                                                                {errors.phone && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.phone}</span>}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Country selector
+                                                    if (field.type === 'select' || field.id === 'company_country') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={getLabelStyle()}>
+                                                                    {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                </label>
+                                                                <select 
+                                                                    value={selectedCountryCode}
+                                                                    onChange={(e) => handleFormChange('companyCountry', countriesList.find(c => c.isoCode === e.target.value)?.name || '')}
+                                                                    style={{ ...getInputStyle(errors.companyCountry), cursor: 'pointer', appearance: 'auto', backgroundColor: '#fff', border: '1px solid #cbd5e1' }}
+                                                                >
+                                                                    <option value="">Select country</option>
+                                                                    {countriesList.map(country => (
+                                                                        <option key={country.isoCode} value={country.isoCode}>{country.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                                {errors.companyCountry && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.companyCountry}</span>}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Hide province if no states
+                                                    if (field.id === 'province' && statesList.length === 0) {
+                                                        return null;
+                                                    }
+
+                                                    // State selector
+                                                    if (field.id === 'province' && statesList.length > 0) {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={getLabelStyle()}>
+                                                                    {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                </label>
+                                                                <select 
+                                                                    value={selectedStateCode}
+                                                                    onChange={(e) => {
+                                                                        const isoCode = e.target.value;
+                                                                        setSelectedStateCode(isoCode);
+                                                                        const stateName = statesList.find(s => s.isoCode === isoCode)?.name || '';
+                                                                        handleFormChange('province', stateName);
+                                                                    }}
+                                                                    style={{ ...getInputStyle(errors.province), cursor: 'pointer', appearance: 'auto', backgroundColor: '#fff', border: '1px solid #cbd5e1' }}
+                                                                >
+                                                                    <option value="">Select province/state</option>
+                                                                    {statesList.map(state => (
+                                                                        <option key={state.isoCode} value={state.isoCode}>{state.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                                {errors.province && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.province}</span>}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Document upload
+                                                    if (field.type === 'file' || field.id === 'document_upload') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={getLabelStyle()}>
+                                                                    {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                                </label>
+                                                                <div 
+                                                                    onClick={() => {
+                                                                        const file = document.createElement('input');
+                                                                        file.type = 'file';
+                                                                        file.accept = '.pdf,.png,.jpg,.jpeg';
+                                                                        file.onchange = (e) => {
+                                                                            if (e.target.files.length > 0) {
+                                                                                setFileObject(e.target.files[0]);
+                                                                                handleFormChange('document_upload', e.target.files[0].name);
+                                                                            }
+                                                                        };
+                                                                        file.click();
+                                                                    }}
+                                                                    style={{
+                                                                        border: '2px dashed #cbd5e1',
+                                                                        borderRadius: '8px',
+                                                                        padding: '24px 16px',
+                                                                        textAlign: 'center',
+                                                                        backgroundColor: 'rgba(255,255,255,0.4)',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ marginBottom: '8px', display: 'inline-block' }}>
+                                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                                                    </svg>
+                                                                    <p style={{ margin: 0, fontSize: '14px', color: '#64748b', fontWeight: '500' }}>
+                                                                        {formData.document_upload ? `Selected: ${formData.document_upload}` : 'Click to upload or drag files here (PDF, PNG, JPG)'}
+                                                                    </p>
+                                                                </div>
+                                                                {errors.document_upload && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.document_upload}</span>}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // Standard textbox / textarea
+                                                    return (
+                                                        <div key={field.id}>
+                                                            <label style={getLabelStyle()}>
+                                                                {field.name} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+                                                            </label>
+                                                            {field.type === 'textarea' ? (
+                                                                <textarea 
+                                                                    name={stateKey}
+                                                                    rows="3"
+                                                                    value={val}
+                                                                    onChange={(e) => handleFormChange(stateKey, e.target.value)}
+                                                                    onBlur={handleBlur}
+                                                                    placeholder={`Enter ${field.name.toLowerCase()}`}
+                                                                    style={{ ...getInputStyle(errors[stateKey]), resize: 'none' }}
+                                                                />
+                                                            ) : (
+                                                                <input 
+                                                                    type="text" 
+                                                                    name={stateKey}
+                                                                    value={val}
+                                                                    onChange={(e) => handleFormChange(stateKey, e.target.value)}
+                                                                    onBlur={handleBlur}
+                                                                    placeholder={`Enter ${field.name.toLowerCase()}`}
+                                                                    style={getInputStyle(errors[stateKey])}
+                                                                />
+                                                            )}
+                                                            {errors[stateKey] && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors[stateKey]}</span>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
 
                                     <button type="submit" disabled={loading} style={{
                                         backgroundColor: '#1a1a1a',
@@ -550,7 +1094,8 @@ export default function SinglePageRegistration() {
                                         borderRadius: '8px',
                                         fontSize: '16px',
                                         fontWeight: 'bold',
-                                        cursor: loading ? 'not-allowed' : 'pointer'
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        marginTop: '12px'
                                     }}>
                                         {loading ? 'Submitting...' : 'Register'}
                                     </button>

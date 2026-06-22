@@ -18,7 +18,11 @@ export const registrationService = {
         // Append standard fields
         Object.keys(rawData).forEach(key => {
             if (rawData[key] !== undefined && rawData[key] !== null) {
-                formData.append(key, rawData[key]);
+                if (key === 'metafields' && typeof rawData[key] === 'object') {
+                    formData.append(key, JSON.stringify(rawData[key]));
+                } else {
+                    formData.append(key, rawData[key]);
+                }
             }
         });
 
@@ -102,6 +106,23 @@ export const registrationService = {
             setting_key: key,
             is_enabled: isEnabled ? 1 : 0
         });
+    },
+
+    /**
+     * Fetch form configuration steps from the database
+     * @returns {Promise<Object>}
+     */
+    getFormConfig: async () => {
+        return apiClient.get('/b2b/form-config');
+    },
+
+    /**
+     * Save form configuration steps to the database
+     * @param {Array} steps
+     * @returns {Promise<Object>}
+     */
+    saveFormConfig: async (steps) => {
+        return apiClient.post('/b2b/form-config/update', { steps });
     }
 };
 

@@ -33,6 +33,9 @@ export default function B2BRegistrationForm({ onBack }) {
     const [isActive, setIsActive] = useState(true);
     const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' or 'mobile'
     const [activeEditSection, setActiveEditSection] = useState('company-info'); // 'header', 'footer', or step id
+    const [selectedField, setSelectedField] = useState(null);
+    const [addingToStepId, setAddingToStepId] = useState(null);
+    const [newFieldName, setNewFieldName] = useState('');
 
     // Header & Footer States
     const [formTitle, setFormTitle] = useState('Wholesale Application');
@@ -41,29 +44,18 @@ export default function B2BRegistrationForm({ onBack }) {
 
     // Tree/Steps Config
     const [steps, setSteps] = useState(() => {
-        const saved = localStorage.getItem('b2b_form_steps');
+        const saved = localStorage.getItem('b2b_form_steps_v2');
         if (saved) {
             try {
-                const parsed = JSON.parse(saved);
-                // Migration: Flatten old multi-step structure if it has > 1 steps
-                if (parsed.length > 1) {
-                    const allFields = parsed.reduce((acc, step) => [...acc, ...step.fields], []);
-                    return [{
-                        id: 'form-fields',
-                        name: 'Registration Form',
-                        isOpen: true,
-                        fields: allFields
-                    }];
-                }
-                return parsed;
+                return JSON.parse(saved);
             } catch (e) {
                 console.error("Failed to parse form steps from local storage", e);
             }
         }
         return [
             {
-                id: 'form-fields',
-                name: 'Registration Form',
+                id: 'company-fields',
+                name: 'Company Section',
                 isOpen: true,
                 fields: [
                     { id: 'company_name', name: 'Company name', type: 'text', required: true, metafieldType: 'none' },
@@ -73,10 +65,17 @@ export default function B2BRegistrationForm({ onBack }) {
                     { id: 'company_city', name: 'Company city', type: 'text', required: true, metafieldType: 'none' },
                     { id: 'province', name: 'Province', type: 'text', required: true, metafieldType: 'none' },
                     { id: 'zip', name: 'Zip code / Postal code', type: 'text', required: true, metafieldType: 'none' },
-                    { id: 'message', name: 'Message', type: 'textarea', required: false, metafieldType: 'none' },
-                    { id: 'number', name: 'Number', type: 'number', required: false, metafieldType: 'none' },
                     { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true, metafieldType: 'none' },
                     { id: 'document_upload', name: 'Business License / Document Upload', type: 'file', required: false, metafieldType: 'none' },
+                    { id: 'message', name: 'Message', type: 'textarea', required: false, metafieldType: 'none' },
+                    { id: 'number', name: 'Number', type: 'number', required: false, metafieldType: 'none' }
+                ]
+            },
+            {
+                id: 'customer-fields',
+                name: 'Customer Section',
+                isOpen: true,
+                fields: [
                     { id: 'first_name', name: 'First name', type: 'text', required: true, metafieldType: 'none' },
                     { id: 'last_name', name: 'Last name', type: 'text', required: true, metafieldType: 'none' },
                     { id: 'email', name: 'Your email', type: 'email', required: true, metafieldType: 'none' },
@@ -87,7 +86,18 @@ export default function B2BRegistrationForm({ onBack }) {
     });
 
     useEffect(() => {
-        localStorage.setItem('b2b_form_steps', JSON.stringify(steps));
+        // Load configuration from DB
+        registrationService.getFormConfig()
+            .then(res => {
+                if (res && res.success && res.data) {
+                    setSteps(res.data);
+                }
+            })
+            .catch(err => console.error("Failed to load registration form config from DB", err));
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('b2b_form_steps_v2', JSON.stringify(steps));
     }, [steps]);
 
     // Live Preview Form State
@@ -257,48 +267,36 @@ export default function B2BRegistrationForm({ onBack }) {
     };
 
     const handleAddField = (stepId) => {
-        const fieldName = prompt("Enter new field name:");
-        if (!fieldName) return;
-        const newId = fieldName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        setAddingToStepId(stepId);
+        setNewFieldName('');
+    };
+
+    const handleSaveInlineField = (stepId) => {
+        const name = newFieldName.trim();
+        if (!name) {
+            setAddingToStepId(null);
+            return;
+        }
+        const newId = name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now();
         setSteps(steps.map(s => {
             if (s.id === stepId) {
                 return {
                     ...s,
-                    fields: [...s.fields, { id: newId, name: fieldName, type: 'text', required: false, metafieldType: 'none' }]
+                    fields: [...s.fields, { id: newId, name: name, type: 'text', required: false, metafieldType: 'none' }]
                 };
             }
             return s;
         }));
+        setAddingToStepId(null);
+        setNewFieldName('');
     };
 
-    const handleToggleMetafield = (stepId, fieldId) => {
-        const options = ['none', 'customer', 'company'];
+    const updateFieldProperty = (stepId, fieldId, propName, value) => {
         setSteps(steps.map(s => {
             if (s.id === stepId) {
                 return {
                     ...s,
-                    fields: s.fields.map(f => {
-                        if (f.id === fieldId) {
-                            const current = f.metafieldType || 'none';
-                            const nextIndex = (options.indexOf(current) + 1) % options.length;
-                            return { ...f, metafieldType: options[nextIndex] };
-                        }
-                        return f;
-                    })
-                };
-            }
-            return s;
-        }));
-    };
-
-    const handleRenameField = (stepId, fieldId, currentName) => {
-        const newName = prompt("Enter new field name:", currentName);
-        if (!newName || newName === currentName) return;
-        setSteps(steps.map(s => {
-            if (s.id === stepId) {
-                return {
-                    ...s,
-                    fields: s.fields.map(f => f.id === fieldId ? { ...f, name: newName } : f)
+                    fields: s.fields.map(f => f.id === fieldId ? { ...f, [propName]: value } : f)
                 };
             }
             return s;
@@ -313,7 +311,162 @@ export default function B2BRegistrationForm({ onBack }) {
         setActiveEditSection(newId);
     };
 
+    const validateZipByProvince = (zip, country, province) => {
+        if (!zip || !country) return null;
+        const cleanZip = zip.trim();
+        const cleanCountry = country.toLowerCase();
+        const cleanProvince = (province || '').trim().toLowerCase();
+
+        if (cleanCountry === 'united states' || cleanCountry === 'us' || cleanCountry === 'united states of america') {
+            const statePrefixes = {
+                'al': ['35', '36'], 'alabama': ['35', '36'],
+                'ak': ['99'], 'alaska': ['99'],
+                'az': ['85', '86'], 'arizona': ['85', '86'],
+                'ar': ['71', '72'], 'arkansas': ['71', '72'],
+                'ca': ['90', '91', '92', '93', '94', '95', '96'], 'california': ['90', '91', '92', '93', '94', '95', '96'],
+                'co': ['80', '81'], 'colorado': ['80', '81'],
+                'ct': ['06'], 'connecticut': ['06'],
+                'de': ['19'], 'delaware': ['19'],
+                'dc': ['20'], 'district of columbia': ['20'],
+                'fl': ['32', '33', '34'], 'florida': ['32', '33', '34'],
+                'ga': ['30', '31'], 'georgia': ['30', '31'],
+                'hi': ['96'], 'hawaii': ['96'],
+                'id': ['83'], 'idaho': ['83'],
+                'il': ['60', '61', '62'], 'illinois': ['60', '61', '62'],
+                'in': ['46', '47'], 'indiana': ['46', '47'],
+                'ia': ['50', '51', '52'], 'iowa': ['50', '51', '52'],
+                'ks': ['66', '67'], 'kansas': ['66', '67'],
+                'ky': ['40', '41', '42'], 'kentucky': ['40', '41', '42'],
+                'la': ['70', '71'], 'louisiana': ['70', '71'],
+                'me': ['03', '04'], 'maine': ['03', '04'],
+                'md': ['20', '21'], 'maryland': ['20', '21'],
+                'ma': ['01', '02'], 'massachusetts': ['01', '02'],
+                'mi': ['48', '49'], 'michigan': ['48', '49'],
+                'mn': ['55', '56'], 'minnesota': ['55', '56'],
+                'ms': ['38', '39'], 'mississippi': ['38', '39'],
+                'mo': ['63', '64', '65'], 'missouri': ['63', '64', '65'],
+                'mt': ['59'], 'montana': ['59'],
+                'ne': ['68', '69'], 'nebraska': ['68', '69'],
+                'nv': ['88', '89'], 'nevada': ['88', '89'],
+                'nh': ['03'], 'new hampshire': ['03'],
+                'nj': ['07', '08'], 'new jersey': ['07', '08'],
+                'nm': ['87', '88'], 'new mexico': ['87', '88'],
+                'ny': ['09', '10', '11', '12', '13', '14'], 'new york': ['09', '10', '11', '12', '13', '14'],
+                'nc': ['27', '28'], 'north carolina': ['27', '28'],
+                'nd': ['58'], 'north dakota': ['58'],
+                'oh': ['43', '44', '45'], 'ohio': ['43', '44', '45'],
+                'ok': ['73', '74'], 'oklahoma': ['73', '74'],
+                'or': ['97'], 'oregon': ['97'],
+                'pa': ['15', '16', '17', '18', '19'], 'pennsylvania': ['15', '16', '17', '18', '19'],
+                'ri': ['02'], 'rhode island': ['02'],
+                'sc': ['29'], 'south carolina': ['29'],
+                'sd': ['57'], 'south dakota': ['57'],
+                'tn': ['37', '38', '39'], 'tennessee': ['37', '38', '39'],
+                'tx': ['75', '76', '77', '78', '79'], 'texas': ['75', '76', '77', '78', '79'],
+                'ut': ['84'], 'utah': ['84'],
+                'vt': ['05'], 'vermont': ['05'],
+                'va': ['22', '23', '24'], 'virginia': ['22', '23', '24'],
+                'wa': ['98', '99'], 'washington': ['98', '99'],
+                'wv': ['24', '25', '26'], 'west virginia': ['24', '25', '26'],
+                'wi': ['53', '54'], 'wisconsin': ['53', '54'],
+                'wy': ['82', '83'], 'wyoming': ['82', '83']
+            };
+
+            const expectedPrefixes = statePrefixes[cleanProvince];
+            if (expectedPrefixes) {
+                const hasMatch = expectedPrefixes.some(prefix => cleanZip.startsWith(prefix));
+                if (!hasMatch) {
+                    return `ZIP code prefix does not match selected province/state ${province}. Expected prefix like ${expectedPrefixes.join(', ')}`;
+                }
+            }
+        } else if (cleanCountry === 'canada' || cleanCountry === 'ca') {
+            const provinceLetters = {
+                'nl': 'a', 'newfoundland': 'a', 'labrador': 'a', 'newfoundland and labrador': 'a',
+                'ns': 'b', 'nova scotia': 'b',
+                'pe': 'c', 'prince edward island': 'c',
+                'nb': 'e', 'new brunswick': 'e',
+                'qc': 'ghj', 'quebec': 'ghj',
+                'on': 'klmnp', 'ontario': 'klmnp',
+                'mb': 'r', 'manitoba': 'r',
+                'sk': 's', 'saskatchewan': 's',
+                'ab': 't', 'alberta': 't',
+                'bc': 'v', 'british columbia': 'v',
+                'nt': 'x', 'northwest territories': 'x',
+                'nu': 'x', 'nunavut': 'x',
+                'yt': 'y', 'yukon': 'y'
+            };
+
+            const expectedLetters = provinceLetters[cleanProvince];
+            if (expectedLetters) {
+                const firstChar = cleanZip.charAt(0).toLowerCase();
+                if (!expectedLetters.includes(firstChar)) {
+                    return `Postal code does not match selected Canadian province ${province}. Expected first letter to be one of: ${expectedLetters.toUpperCase()}`;
+                }
+            }
+        } else if (cleanCountry === 'india' || cleanCountry === 'in') {
+            const indiaPrefixes = {
+                'dl': ['11'], 'delhi': ['11'],
+                'hr': ['12', '13'], 'haryana': ['12', '13'],
+                'pb': ['14', '15', '16'], 'punjab': ['14', '15', '16'],
+                'hp': ['17'], 'himachal pradesh': ['17'],
+                'jk': ['19'], 'jammu & kashmir': ['19'], 'jammu and kashmir': ['19'],
+                'up': ['20', '21', '22', '23', '24', '25', '26', '27', '28'], 'uttar pradesh': ['20', '21', '22', '23', '24', '25', '26', '27', '28'],
+                'ut': ['24', '25', '26'], 'uttarakhand': ['24', '25', '26'],
+                'rj': ['30', '31', '32', '33', '34'], 'rajasthan': ['30', '31', '32', '33', '34'],
+                'gj': ['36', '37', '38', '39'], 'gujarat': ['36', '37', '38', '39'],
+                'mh': ['40', '41', '42', '43', '44'], 'maharashtra': ['40', '41', '42', '43', '44'],
+                'mp': ['45', '46', '47', '48'], 'madhya pradesh': ['45', '46', '47', '48'],
+                'cg': ['49'], 'chhattisgarh': ['49'],
+                'ap': ['50', '51', '52', '53'], 'andhra pradesh': ['50', '51', '52', '53'],
+                'tg': ['50'], 'telangana': ['50'],
+                'ka': ['56', '57', '58', '59'], 'karnataka': ['56', '57', '58', '59'],
+                'tn': ['60', '61', '62', '63', '64'], 'tamil nadu': ['60', '61', '62', '63', '64'],
+                'kl': ['67', '68', '69'], 'kerala': ['67', '68', '69'],
+                'wb': ['70', '71', '72', '73', '74'], 'west bengal': ['70', '71', '72', '73', '74'],
+                'or': ['75', '76', '77'], 'odisha': ['75', '76', '77'],
+                'br': ['80', '81', '82', '83', '84', '85'], 'bihar': ['80', '81', '82', '83', '84', '85'],
+                'jh': ['80', '81', '82', '83', '84', '85'], 'jharkhand': ['80', '81', '82', '83', '84', '85']
+            };
+
+            const expectedPrefixes = indiaPrefixes[cleanProvince];
+            if (expectedPrefixes) {
+                const hasMatch = expectedPrefixes.some(prefix => cleanZip.startsWith(prefix));
+                if (!hasMatch) {
+                    return `Pincode does not match selected state ${province}. Expected prefix like ${expectedPrefixes.join(', ')}`;
+                }
+            }
+        }
+        return null;
+    };
+
     const handlePreviewChange = (fieldId, val) => {
+        // Prevent typing non-numeric in number fields
+        const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
+        const field = allFields.find(f => {
+            const stateKey = f.id === 'company_name' ? 'companyName' :
+                             f.id === 'company_address' ? 'companyAddress' :
+                             f.id === 'apartment' ? 'apartment' :
+                             f.id === 'company_city' ? 'companyCity' :
+                             f.id === 'province' ? 'province' :
+                             f.id === 'zip' ? 'zip' :
+                             f.id === 'message' ? 'message' :
+                             f.id === 'number' ? 'number' :
+                             f.id === 'tax_id' ? 'taxId' :
+                             f.id === 'email' ? 'email' :
+                             f.id === 'first_name' ? 'firstName' :
+                             f.id === 'last_name' ? 'lastName' :
+                             f.id === 'company_country' ? 'companyCountry' : f.id;
+            return stateKey === fieldId;
+        });
+
+        if (field && field.type === 'number') {
+            val = val.replace(/[^0-9.]/g, '');
+            const parts = val.split('.');
+            if (parts.length > 2) {
+                val = parts[0] + '.' + parts.slice(1).join('');
+            }
+        }
+
         setPreviewFormData(prev => ({ ...prev, [fieldId]: val }));
         if (previewErrors[fieldId]) {
             setPreviewErrors(prev => ({ ...prev, [fieldId]: '' }));
@@ -323,7 +476,19 @@ export default function B2BRegistrationForm({ onBack }) {
         if (fieldId === 'companyCountry') {
             const country = countriesList.find(c => c.name === val || c.isoCode === val);
             setPreviewSelectedCountryCode(country ? country.isoCode : '');
-            setPreviewFormData(prev => ({ ...prev, province: '' })); // reset state when country changes
+            
+            // Automatically set phone code prefix based on selected country
+            let phoneCodeVal = 'US +1';
+            if (country) {
+                const prefix = country.phonecode.startsWith('+') ? country.phonecode : `+${country.phonecode}`;
+                phoneCodeVal = `${country.isoCode} ${prefix}`;
+            }
+
+            setPreviewFormData(prev => ({ 
+                ...prev, 
+                province: '', 
+                phoneCode: phoneCodeVal
+            })); // reset state and update phoneCode when country changes
         }
     };
 
@@ -364,7 +529,7 @@ export default function B2BRegistrationForm({ onBack }) {
     const handlePreviewSubmit = async () => {
         // Validate Preview
         const newErrors = {};
-        const allFields = steps[0]?.fields || [];
+        const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
         allFields.forEach(field => {
             const stateKey = field.id === 'company_name' ? 'companyName' :
                              field.id === 'company_address' ? 'companyAddress' :
@@ -394,6 +559,39 @@ export default function B2BRegistrationForm({ onBack }) {
                 if (!phoneRegex.test(val)) {
                     newErrors.phone = 'Invalid phone number format';
                 }
+            } else if (stateKey === 'zip' && val) {
+                const zipVal = val.trim();
+                const country = previewFormData.companyCountry || '';
+                if (country.toLowerCase() === 'united states' || country.toLowerCase() === 'us' || country.toLowerCase() === 'united states of america') {
+                    if (!/^\d{5}(-\d{4})?$/.test(zipVal)) {
+                        newErrors.zip = 'US zip code must be 5 digits (e.g. 12345) or 5+4 digits (e.g. 12345-6789)';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, previewFormData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'canada' || country.toLowerCase() === 'ca') {
+                    if (!/^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(zipVal)) {
+                        newErrors.zip = 'Canada postal code must be in A1A 1A1 format';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, previewFormData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'india' || country.toLowerCase() === 'in') {
+                    if (!/^\d{6}$/.test(zipVal)) {
+                        newErrors.zip = 'India pincode must be 6 digits';
+                    } else {
+                        const zipErr = validateZipByProvince(zipVal, country, previewFormData.province);
+                        if (zipErr) newErrors.zip = zipErr;
+                    }
+                } else if (country.toLowerCase() === 'united kingdom' || country.toLowerCase() === 'uk' || country.toLowerCase() === 'gb') {
+                    if (!/^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i.test(zipVal)) {
+                        newErrors.zip = 'Invalid UK postcode';
+                    }
+                }
+            } else if (field.type === 'number' && val) {
+                if (isNaN(val) || isNaN(parseFloat(val))) {
+                    newErrors[stateKey] = `${field.name} must be a valid number`;
+                }
             }
         });
 
@@ -403,6 +601,35 @@ export default function B2BRegistrationForm({ onBack }) {
         }
 
         try {
+            // Build metafields object to submit
+            const metafieldsPayload = {};
+            allFields.forEach(field => {
+                const stateKey = field.id === 'company_name' ? 'companyName' :
+                                 field.id === 'company_address' ? 'companyAddress' :
+                                 field.id === 'apartment' ? 'apartment' :
+                                 field.id === 'company_city' ? 'companyCity' :
+                                 field.id === 'province' ? 'province' :
+                                 field.id === 'zip' ? 'zip' :
+                                 field.id === 'message' ? 'message' :
+                                 field.id === 'number' ? 'number' :
+                                 field.id === 'tax_id' ? 'taxId' :
+                                 field.id === 'email' ? 'email' :
+                                 field.id === 'first_name' ? 'firstName' :
+                                 field.id === 'last_name' ? 'lastName' :
+                                 field.id === 'company_country' ? 'companyCountry' : field.id;
+                const val = previewFormData[stateKey];
+                
+                if (field.metafieldType && field.metafieldType !== 'none' && val !== undefined && val !== null && val !== '') {
+                    const ns = field.metafieldNamespace || 'custom';
+                    const key = field.metafieldKey || field.id;
+                    metafieldsPayload[`${ns}.${key}`] = {
+                        value: val,
+                        owner_type: field.metafieldType,
+                        type: field.metafieldValueType || 'single_line_text_field'
+                    };
+                }
+            });
+
             const submitData = {
                 firstName: previewFormData.firstName || 'Jane',
                 lastName: previewFormData.lastName || 'Smith',
@@ -413,8 +640,9 @@ export default function B2BRegistrationForm({ onBack }) {
                 zip: previewFormData.zip || '12345',
                 country: previewFormData.companyCountry || 'United States',
                 taxId: previewFormData.taxId || '',
-                phone: previewFormData.phone || '',
-                notes: previewFormData.message || ''
+                phone: previewFormData.phone ? `${previewFormData.phoneCode} ${previewFormData.phone}`.trim() : '',
+                notes: previewFormData.message || '',
+                metafields: metafieldsPayload
             };
             
             await registrationService.submitRegistration(submitData);
@@ -614,7 +842,14 @@ export default function B2BRegistrationForm({ onBack }) {
                         Discard
                     </button>
                     <button 
-                        onClick={() => alert("Form changes saved successfully!")}
+                        onClick={async () => {
+                            try {
+                                await registrationService.saveFormConfig(steps);
+                                alert("Form changes saved successfully to database!");
+                            } catch (e) {
+                                alert("Failed to save configuration: " + (e.message || e));
+                            }
+                        }}
                         style={{
                             padding: '8px 16px',
                             border: 'none',
@@ -776,12 +1011,34 @@ export default function B2BRegistrationForm({ onBack }) {
                                                                     {getFieldIcon(field.id)}
                                                                 </span>
                                                                 <span 
-                                                                    onClick={() => handleRenameField(step.id, field.id, field.name)}
-                                                                    title="Click to rename field"
-                                                                    style={{ fontWeight: '500', color: '#303030', cursor: 'pointer', borderBottom: '1px dashed #c9cccf' }}
+                                                                    onClick={() => {
+                                                                        setSelectedField({ stepId: step.id, fieldId: field.id });
+                                                                        setActiveEditSection('field-editor');
+                                                                    }}
+                                                                    title="Click to configure field"
+                                                                    style={{
+                                                                        fontWeight: selectedField?.fieldId === field.id ? 'bold' : '500',
+                                                                        color: selectedField?.fieldId === field.id ? '#005bd3' : '#303030',
+                                                                        cursor: 'pointer',
+                                                                        borderBottom: '1px dashed #c9cccf'
+                                                                    }}
                                                                 >
                                                                     {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
                                                                 </span>
+                                                                {field.metafieldType && field.metafieldType !== 'none' && (
+                                                                    <span style={{
+                                                                        marginLeft: '4px',
+                                                                        fontSize: '10px',
+                                                                        padding: '1px 4px',
+                                                                        borderRadius: '3px',
+                                                                        backgroundColor: field.metafieldType === 'customer' ? '#e0f2fe' : '#dcfce7',
+                                                                        color: field.metafieldType === 'customer' ? '#0369a1' : '#15803d',
+                                                                        fontWeight: 'bold',
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}>
+                                                                        {field.metafieldType === 'customer' ? 'Cust Meta' : 'Comp Meta'}
+                                                                    </span>
+                                                                )}
                                                             </InlineStack>
 
                                                             <InlineStack gap="100" blockAlign="center">
@@ -824,7 +1081,36 @@ export default function B2BRegistrationForm({ onBack }) {
                                                             </InlineStack>
                                                         </div>
                                                     ))}
-                                                    {step.fields.length === 0 && (
+                                                    {addingToStepId === step.id && (
+                                                        <div style={{ padding: '4px 8px' }}>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Type name & press Enter"
+                                                                value={newFieldName}
+                                                                onChange={(e) => setNewFieldName(e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        handleSaveInlineField(step.id);
+                                                                    } else if (e.key === 'Escape') {
+                                                                        setAddingToStepId(null);
+                                                                    }
+                                                                }}
+                                                                onBlur={() => handleSaveInlineField(step.id)}
+                                                                autoFocus
+                                                                style={{
+                                                                    width: '100%',
+                                                                    padding: '6px 10px',
+                                                                    border: '1.5px solid #008060',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '13px',
+                                                                    boxSizing: 'border-box',
+                                                                    outline: 'none',
+                                                                    boxShadow: '0 0 0 1px rgba(0, 128, 96, 0.15)'
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {step.fields.length === 0 && !addingToStepId && (
                                                         <span style={{ fontSize: '12px', color: '#8c9196', fontStyle: 'italic', padding: '4px 8px' }}>
                                                             No fields. Click + Add to insert.
                                                         </span>
@@ -905,7 +1191,69 @@ export default function B2BRegistrationForm({ onBack }) {
                                     </BlockStack>
                                 )}
 
-                                {activeEditSection !== 'header' && activeEditSection !== 'footer' && (
+                                {activeEditSection === 'field-editor' && selectedField && (() => {
+                                    const currentField = steps.find(s => s.id === selectedField.stepId)?.fields.find(f => f.id === selectedField.fieldId);
+                                    if (!currentField) return <Text>Select a field to configure details</Text>;
+                                    return (
+                                        <BlockStack gap="300">
+                                            <Text variant="headingSm">Field Settings</Text>
+                                            <TextField
+                                                label="Field Name (Label)"
+                                                value={currentField.name}
+                                                onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'name', v)}
+                                                autoComplete="off"
+                                            />
+                                            <Checkbox
+                                                label="Field Required"
+                                                checked={currentField.required || false}
+                                                onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'required', v)}
+                                            />
+                                            <Divider />
+                                            <Text variant="headingSm">Shopify Metafield Mapping</Text>
+                                            <Select
+                                                label="Map to Metafield"
+                                                options={[
+                                                    { label: 'None (Default Column)', value: 'none' },
+                                                    { label: 'Customer Metafield', value: 'customer' },
+                                                    { label: 'Company Metafield', value: 'company' }
+                                                ]}
+                                                value={currentField.metafieldType || 'none'}
+                                                onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'metafieldType', v)}
+                                            />
+                                            {currentField.metafieldType && currentField.metafieldType !== 'none' && (
+                                                <BlockStack gap="200">
+                                                    <TextField
+                                                        label="Namespace"
+                                                        value={currentField.metafieldNamespace || 'custom'}
+                                                        onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'metafieldNamespace', v)}
+                                                        autoComplete="off"
+                                                        helpText="Usually 'custom' in Shopify"
+                                                    />
+                                                    <TextField
+                                                        label="Metafield Key"
+                                                        value={currentField.metafieldKey || currentField.id}
+                                                        onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'metafieldKey', v)}
+                                                        autoComplete="off"
+                                                    />
+                                                    <Select
+                                                        label="Value Type"
+                                                        options={[
+                                                            { label: 'Single-line text', value: 'single_line_text_field' },
+                                                            { label: 'Multi-line text', value: 'multi_line_text_field' },
+                                                            { label: 'Integer', value: 'number_integer' },
+                                                            { label: 'Decimal', value: 'number_decimal' },
+                                                            { label: 'True/False', value: 'boolean' }
+                                                        ]}
+                                                        value={currentField.metafieldValueType || 'single_line_text_field'}
+                                                        onChange={(v) => updateFieldProperty(selectedField.stepId, selectedField.fieldId, 'metafieldValueType', v)}
+                                                    />
+                                                </BlockStack>
+                                            )}
+                                        </BlockStack>
+                                    );
+                                })()}
+
+                                {activeEditSection !== 'header' && activeEditSection !== 'footer' && activeEditSection !== 'field-editor' && (
                                     <BlockStack gap="200">
                                         <Text variant="headingSm">Step Details</Text>
                                         <Text variant="bodySm" tone="subdued">
@@ -987,217 +1335,242 @@ export default function B2BRegistrationForm({ onBack }) {
 
                                 <Divider />
 
-                                {/* Render Active Step Fields with editable state */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
-                                    {steps[activeStepIndex] && steps[activeStepIndex].fields.map((field) => {
-                                        // Custom side-by-side render for First Name / Last Name in Step 3
-                                        if (field.id === 'first_name') {
-                                            const lastNameField = steps[activeStepIndex].fields.find(f => f.id === 'last_name');
-                                            return (
-                                                <div key={field.id} style={{ display: 'flex', gap: '16px', flexDirection: deviceMode === 'mobile' ? 'column' : 'row' }}>
-                                                    <div style={{ flex: 1 }}>
-                                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                            {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                        </label>
-                                                        <input 
-                                                            type="text" 
-                                                            value={previewFormData.firstName}
-                                                            onChange={(e) => handlePreviewChange('firstName', e.target.value)}
-                                                            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.firstName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
-                                                            placeholder="e.g. John"
-                                                        />
-                                                        {previewErrors.firstName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.firstName}</div>}
-                                                    </div>
-                                                    {lastNameField && (
-                                                        <div style={{ flex: 1 }}>
-                                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                                {lastNameField.name} {lastNameField.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                            </label>
-                                                            <input 
-                                                                type="text" 
-                                                                value={previewFormData.lastName}
-                                                                onChange={(e) => handlePreviewChange('lastName', e.target.value)}
-                                                                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.lastName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
-                                                                placeholder="e.g. Doe"
-                                                            />
-                                                            {previewErrors.lastName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.lastName}</div>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        }
-                                        
-                                        // Skip rendering Last Name stand-alone because it was already rendered side-by-side with First Name
-                                        if (field.id === 'last_name') return null;
-
-                                        // Custom render for Phone Number with Country Code Dropdown
-                                        if (field.id === 'phone') {
-                                            return (
-                                                <div key={field.id}>
-                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                    </label>
-                                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                                        <select 
-                                                            value={previewFormData.phoneCode}
-                                                            onChange={(e) => handlePreviewChange('phoneCode', e.target.value)}
-                                                            style={{ padding: '10px', border: '1px solid #c9cccf', borderRadius: '6px', backgroundColor: '#fafafa', fontSize: '14px', width: '90px', cursor: 'pointer' }}
-                                                        >
-                                                            <option value="US +1">US +1</option>
-                                                            <option value="CA +1">CA +1</option>
-                                                            <option value="UK +44">UK +44</option>
-                                                        </select>
-                                                        <input 
-                                                            type="text" 
-                                                            placeholder="201-555-0123"
-                                                            value={previewFormData.phone}
-                                                            onChange={(e) => handlePreviewChange('phone', e.target.value)}
-                                                            style={{ flex: 1, padding: '10px 12px', border: `1px solid ${previewErrors.phone ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
-                                                        />
-                                                    </div>
-                                                    {previewErrors.phone && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.phone}</div>}
-                                                </div>
-                                            );
-                                        }
-
-                                        // Country Dropdown
-                                        if (field.type === 'select' || field.id === 'company_country') {
-                                            return (
-                                                <div key={field.id}>
-                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                    </label>
-                                                    <select 
-                                                        value={previewSelectedCountryCode}
-                                                        onChange={(e) => {
-                                                            const isoCode = e.target.value;
-                                                            const countryName = countriesList.find(c => c.isoCode === isoCode)?.name || '';
-                                                            handlePreviewChange('companyCountry', countryName);
-                                                        }}
-                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.companyCountry ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
-                                                    >
-                                                        <option value="">Select country</option>
-                                                        {countriesList.map(country => (
-                                                            <option key={country.isoCode} value={country.isoCode}>{country.name}</option>
-                                                        ))}
-                                                    </select>
-                                                    {previewErrors.companyCountry && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.companyCountry}</div>}
-                                                </div>
-                                            );
-                                        }
-
-                                        // File Upload Drop Container
-                                        if (field.type === 'file' || field.id === 'document_upload') {
-                                            return (
-                                                <div key={field.id}>
-                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                    </label>
-                                                    <div 
-                                                        onClick={() => {
-                                                            const fileName = prompt("Upload simulated business document (e.g. resale_license.pdf):");
-                                                            if (fileName) {
-                                                                handlePreviewChange('document_upload', fileName);
-                                                            }
-                                                        }}
-                                                        style={{
-                                                            border: '1.5px dashed #c9cccf',
-                                                            borderRadius: '8px',
-                                                            padding: '24px 16px',
-                                                            textAlign: 'center',
-                                                            backgroundColor: '#fafafa',
-                                                            cursor: 'pointer'
-                                                        }}
-                                                    >
-                                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6d7175" strokeWidth="2" style={{ marginBottom: '8px', display: 'inline-block' }}>
-                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                                            <polyline points="17 8 12 3 7 8"></polyline>
-                                                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                                                        </svg>
-                                                        <p style={{ margin: 0, fontSize: '13px', color: '#6d7175', fontWeight: '500' }}>
-                                                            {previewFormData.document_upload ? `Selected: ${previewFormData.document_upload}` : 'Click to upload or drag files here (PDF, PNG, JPG)'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-
-                                        // Hide Province if no states
-                                        if (field.id === 'province' && statesList.length === 0) {
-                                            return null;
-                                        }
-
-                                        // Render Province Dropdown if states exist
-                                        if (field.id === 'province' && statesList.length > 0) {
-                                            return (
-                                                <div key={field.id}>
-                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                    </label>
-                                                    <select 
-                                                        value={previewFormData.province}
-                                                        onChange={(e) => handlePreviewChange('province', e.target.value)}
-                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.province ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
-                                                    >
-                                                        <option value="">Select province/state</option>
-                                                        {statesList.map(state => (
-                                                            <option key={state.isoCode} value={state.name}>{state.name}</option>
-                                                        ))}
-                                                    </select>
-                                                    {previewErrors.province && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.province}</div>}
-                                                </div>
-                                            );
-                                        }
-
-                                        // Standard input / textarea
-                                        const formVal = field.id === 'company_name' ? previewFormData.companyName :
-                                                        field.id === 'company_address' ? previewFormData.companyAddress :
-                                                        field.id === 'apartment' ? previewFormData.apartment :
-                                                        field.id === 'company_city' ? previewFormData.companyCity :
-                                                        field.id === 'province' ? previewFormData.province :
-                                                        field.id === 'zip' ? previewFormData.zip :
-                                                        field.id === 'message' ? previewFormData.message :
-                                                        field.id === 'number' ? previewFormData.number :
-                                                        field.id === 'tax_id' ? previewFormData.taxId :
-                                                        field.id === 'email' ? previewFormData.email : '';
-                                                        
-                                        const stateKey = field.id === 'company_name' ? 'companyName' :
-                                                         field.id === 'company_address' ? 'companyAddress' :
-                                                         field.id === 'apartment' ? 'apartment' :
-                                                         field.id === 'company_city' ? 'companyCity' :
-                                                         field.id === 'province' ? 'province' :
-                                                         field.id === 'zip' ? 'zip' :
-                                                         field.id === 'message' ? 'message' :
-                                                         field.id === 'number' ? 'number' :
-                                                         field.id === 'tax_id' ? 'taxId' :
-                                                         field.id === 'email' ? 'email' : field.id;
-
-                                        return (
-                                            <div key={field.id}>
-                                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
-                                                    {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
-                                                </label>
-                                                {field.type === 'textarea' ? (
-                                                    <textarea 
-                                                        rows="3" 
-                                                        value={formVal}
-                                                        onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
-                                                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
-                                                    />
-                                                ) : (
-                                                    <input 
-                                                        type="text" 
-                                                        value={formVal}
-                                                        onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
-                                                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
-                                                    />
-                                                )}
-                                                {previewErrors[stateKey] && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors[stateKey]}</div>}
+                                {/* Render All Steps Fields with editable state */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '8px' }}>
+                                    {steps.map((step) => (
+                                        <div key={step.id} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            <div style={{ paddingBottom: '4px', borderBottom: '1px solid #ebebeb' }}>
+                                                <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+                                                    {step.name}
+                                                </h3>
                                             </div>
-                                        );
-                                    })}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                                {step.fields.map((field) => {
+                                                    // Custom side-by-side render for First Name / Last Name in Step 3
+                                                    if (field.id === 'first_name') {
+                                                        const lastNameField = step.fields.find(f => f.id === 'last_name');
+                                                        return (
+                                                            <div key={field.id} style={{ display: 'flex', gap: '16px', flexDirection: deviceMode === 'mobile' ? 'column' : 'row' }}>
+                                                                <div style={{ flex: 1 }}>
+                                                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                        {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                    </label>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={previewFormData.firstName}
+                                                                        onChange={(e) => handlePreviewChange('firstName', e.target.value)}
+                                                                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.firstName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                                        placeholder="e.g. John"
+                                                                    />
+                                                                    {previewErrors.firstName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.firstName}</div>}
+                                                                </div>
+                                                                {lastNameField && (
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                            {lastNameField.name} {lastNameField.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                        </label>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            value={previewFormData.lastName}
+                                                                            onChange={(e) => handlePreviewChange('lastName', e.target.value)}
+                                                                            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.lastName ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                                            placeholder="e.g. Doe"
+                                                                        />
+                                                                        {previewErrors.lastName && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.lastName}</div>}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    
+                                                    // Skip rendering Last Name stand-alone because it was already rendered side-by-side with First Name
+                                                    if (field.id === 'last_name') return null;
+                                            
+                                                    // Custom render for Phone Number with Country Code Dropdown
+                                                    if (field.id === 'phone') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                    {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                </label>
+                                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                                    <select 
+                                                                        value={previewFormData.phoneCode}
+                                                                        onChange={(e) => handlePreviewChange('phoneCode', e.target.value)}
+                                                                        style={{ padding: '10px', border: '1px solid #c9cccf', borderRadius: '6px', backgroundColor: '#fafafa', fontSize: '14px', width: '95px', cursor: 'pointer' }}
+                                                                    >
+                                                                        {countriesList.length > 0 ? (
+                                                                            countriesList.map(country => {
+                                                                                const prefix = country.phonecode.startsWith('+') ? country.phonecode : `+${country.phonecode}`;
+                                                                                const optionVal = `${country.isoCode} ${prefix}`;
+                                                                                return (
+                                                                                    <option key={country.isoCode} value={optionVal}>
+                                                                                        {country.isoCode} {prefix}
+                                                                                    </option>
+                                                                                );
+                                                                            })
+                                                                        ) : (
+                                                                            <>
+                                                                                <option value="US +1">US +1</option>
+                                                                                <option value="CA +1">CA +1</option>
+                                                                                <option value="UK +44">UK +44</option>
+                                                                            </>
+                                                                        )}
+                                                                    </select>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        placeholder="201-555-0123"
+                                                                        value={previewFormData.phone}
+                                                                        onChange={(e) => handlePreviewChange('phone', e.target.value)}
+                                                                        style={{ flex: 1, padding: '10px 12px', border: `1px solid ${previewErrors.phone ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                                    />
+                                                                </div>
+                                                                {previewErrors.phone && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.phone}</div>}
+                                                            </div>
+                                                        );
+                                                    }
+                                            
+                                                    // Country Dropdown
+                                                    if (field.type === 'select' || field.id === 'company_country') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                    {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                </label>
+                                                                <select 
+                                                                    value={previewSelectedCountryCode}
+                                                                    onChange={(e) => {
+                                                                        const isoCode = e.target.value;
+                                                                        const countryName = countriesList.find(c => c.isoCode === isoCode)?.name || '';
+                                                                        handlePreviewChange('companyCountry', countryName);
+                                                                    }}
+                                                                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.companyCountry ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
+                                                                >
+                                                                    <option value="">Select country</option>
+                                                                    {countriesList.map(country => (
+                                                                        <option key={country.isoCode} value={country.isoCode}>{country.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                                {previewErrors.companyCountry && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.companyCountry}</div>}
+                                                            </div>
+                                                        );
+                                                    }
+                                            
+                                                    // File Upload Drop Container
+                                                    if (field.type === 'file' || field.id === 'document_upload') {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                    {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                </label>
+                                                                <div 
+                                                                    onClick={() => {
+                                                                        const fileName = prompt("Upload simulated business document (e.g. resale_license.pdf):");
+                                                                        if (fileName) {
+                                                                            handlePreviewChange('document_upload', fileName);
+                                                                        }
+                                                                    }}
+                                                                    style={{
+                                                                        border: '1.5px dashed #c9cccf',
+                                                                        borderRadius: '8px',
+                                                                        padding: '24px 16px',
+                                                                        textAlign: 'center',
+                                                                        backgroundColor: '#fafafa',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6d7175" strokeWidth="2" style={{ marginBottom: '8px', display: 'inline-block' }}>
+                                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                                                    </svg>
+                                                                    <p style={{ margin: 0, fontSize: '13px', color: '#6d7175', fontWeight: '500' }}>
+                                                                        {previewFormData.document_upload ? `Selected: ${previewFormData.document_upload}` : 'Click to upload or drag files here (PDF, PNG, JPG)'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                            
+                                                    // Hide Province if no states
+                                                    if (field.id === 'province' && statesList.length === 0) {
+                                                        return null;
+                                                    }
+                                            
+                                                    // Render Province Dropdown if states exist
+                                                    if (field.id === 'province' && statesList.length > 0) {
+                                                        return (
+                                                            <div key={field.id}>
+                                                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                    {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                                </label>
+                                                                <select 
+                                                                    value={previewFormData.province}
+                                                                    onChange={(e) => handlePreviewChange('province', e.target.value)}
+                                                                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors.province ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', backgroundColor: 'white', fontSize: '14px', boxSizing: 'border-box', cursor: 'pointer' }}
+                                                                >
+                                                                    <option value="">Select province/state</option>
+                                                                    {statesList.map(state => (
+                                                                        <option key={state.isoCode} value={state.name}>{state.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                                {previewErrors.province && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors.province}</div>}
+                                                            </div>
+                                                        );
+                                                    }
+                                            
+                                                    // Standard input / textarea
+                                                    const stateKey = field.id === 'company_name' ? 'companyName' :
+                                                                     field.id === 'company_address' ? 'companyAddress' :
+                                                                     field.id === 'apartment' ? 'apartment' :
+                                                                     field.id === 'company_city' ? 'companyCity' :
+                                                                     field.id === 'province' ? 'province' :
+                                                                     field.id === 'zip' ? 'zip' :
+                                                                     field.id === 'message' ? 'message' :
+                                                                     field.id === 'number' ? 'number' :
+                                                                     field.id === 'tax_id' ? 'taxId' :
+                                                                     field.id === 'email' ? 'email' : field.id;
+                                                    
+                                                    const formVal = field.id === 'company_name' ? previewFormData.companyName :
+                                                                    field.id === 'company_address' ? previewFormData.companyAddress :
+                                                                    field.id === 'apartment' ? previewFormData.apartment :
+                                                                    field.id === 'company_city' ? previewFormData.companyCity :
+                                                                    field.id === 'province' ? previewFormData.province :
+                                                                    field.id === 'zip' ? previewFormData.zip :
+                                                                    field.id === 'message' ? previewFormData.message :
+                                                                    field.id === 'number' ? previewFormData.number :
+                                                                    field.id === 'tax_id' ? previewFormData.taxId :
+                                                                    field.id === 'email' ? previewFormData.email : (previewFormData[stateKey] || '');
+                                            
+                                                    return (
+                                                        <div key={field.id}>
+                                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#303030', marginBottom: '6px' }}>
+                                                                {field.name} {field.required && <span style={{ color: '#d82c0d' }}>*</span>}
+                                                            </label>
+                                                            {field.type === 'textarea' ? (
+                                                                <textarea 
+                                                                    rows="3" 
+                                                                    value={formVal}
+                                                                    onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
+                                                                    placeholder={`Enter ${field.name.toLowerCase()}`}
+                                                                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
+                                                                />
+                                                            ) : (
+                                                                <input 
+                                                                    type="text" 
+                                                                    value={formVal}
+                                                                    onChange={(e) => handlePreviewChange(stateKey, e.target.value)}
+                                                                    placeholder={`Enter ${field.name.toLowerCase()}`}
+                                                                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${previewErrors[stateKey] ? '#d82c0d' : '#c9cccf'}`, borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+                                                                />
+                                                            )}
+                                                            {previewErrors[stateKey] && <div style={{ color: '#d82c0d', fontSize: '12px', marginTop: '4px' }}>{previewErrors[stateKey]}</div>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 {/* Wizard Footer Navigation Controls Removed for single-page layout */}

@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class B2BNotificationSetting extends Model
+class ShopifyShop extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class B2BNotificationSetting extends Model
      *
      * @var string
      */
-    protected $table = 'b2b_notification_settings';
+    protected $table = 'shopify_shops';
 
     /**
      * The attributes that are mass assignable.
@@ -23,16 +23,7 @@ class B2BNotificationSetting extends Model
      */
     protected $fillable = [
         'shop_domain',
-        'setting_key',
-        'is_enabled',
-    ];
-
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
-    protected $casts = [
-        'is_enabled' => 'boolean',
+        'shop_name',
+        'access_token',
     ];
 }

@@ -12,6 +12,7 @@ class B2BQuote extends Model
     protected $table = 'b2b_quotes';
 
     protected $fillable = [
+        'shop_domain',
         'quote_number',
         'status',
         'product_name',

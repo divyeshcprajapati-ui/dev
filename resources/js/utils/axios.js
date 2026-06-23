@@ -11,13 +11,27 @@ const apiClient = axios.create({
     withCredentials: true // Required to allow cookies (like XSRF-TOKEN) to be sent automatically
 });
 
-// Request Interceptor: Attach CSRF Token if available in meta tags
+// Request Interceptor: Attach CSRF Token and Shop Domain if available
 apiClient.interceptors.request.use(
     (config) => {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         if (csrfToken) {
             config.headers['X-CSRF-TOKEN'] = csrfToken;
         }
+
+        // Extract shop from URL parameters or session storage
+        const urlParams = new URLSearchParams(window.location.search);
+        let shop = urlParams.get('shop');
+        if (shop) {
+            sessionStorage.setItem('shopify_shop', shop);
+        } else {
+            shop = sessionStorage.getItem('shopify_shop');
+        }
+
+        if (shop) {
+            config.headers['X-Shop-Domain'] = shop;
+        }
+
         return config;
     },
     (error) => {

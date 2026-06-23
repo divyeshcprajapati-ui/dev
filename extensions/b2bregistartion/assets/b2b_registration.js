@@ -19,8 +19,10 @@
 
     // Helper to get request headers including ngrok bypass
     function getRequestHeaders(extraHeaders = {}) {
+      const shop = document.getElementById('shopify-shop-domain')?.value || (typeof Shopify !== 'undefined' ? Shopify.shop : '');
       return {
         'ngrok-skip-browser-warning': 'true',
+        ...(shop ? { 'X-Shop-Domain': shop } : {}),
         ...extraHeaders
       };
     }
@@ -241,6 +243,10 @@
       submitBtn.querySelector('.btn-spinner').classList.remove('hidden');
 
       const formData = new FormData();
+      const shopDomain = document.getElementById('shopify-shop-domain')?.value || (typeof Shopify !== 'undefined' ? Shopify.shop : '');
+      if (shopDomain) {
+        formData.append('shop', shopDomain);
+      }
       formData.append('firstName', document.getElementById('firstName').value.trim());
       formData.append('lastName', document.getElementById('lastName').value.trim());
       formData.append('email', document.getElementById('email').value.trim());

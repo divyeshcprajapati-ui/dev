@@ -26,8 +26,9 @@ class B2BRegistrationController extends Controller
         try {
             $limit = $request->query('limit', 20);
             $status = $request->query('status');
+            $shopDomain = $this->resolveShopDomain($request);
 
-            $query = B2BApplication::orderBy('created_at', 'desc');
+            $query = B2BApplication::where('shop_domain', $shopDomain)->orderBy('created_at', 'desc');
 
             if ($status && $status !== 'all') {
                 if (strtolower($status) === 'failed') {
@@ -98,6 +99,8 @@ class B2BRegistrationController extends Controller
                 'validated' => $validatedData
             ]);
 
+            $shopDomain = $this->resolveShopDomain($request);
+
             // Document upload handler
             $filePath = null;
             if ($request->hasFile('businessDocument')) {
@@ -127,6 +130,7 @@ class B2BRegistrationController extends Controller
 
             // Save B2B Application Data to database
             $application = B2BApplication::create([
+                'shop_domain' => $shopDomain,
                 'first_name' => $validatedData['firstName'],
                 'last_name' => $validatedData['lastName'],
                 'email' => $validatedData['email'],
@@ -186,6 +190,7 @@ class B2BRegistrationController extends Controller
     {
         try {
             $application = B2BApplication::findOrFail($id);
+            $shopDomain = $application->shop_domain;
 
             // Prepare B2B Company Creation Payload
             $companyName = $application->company_name;
@@ -228,6 +233,39 @@ class B2BRegistrationController extends Controller
                 $companyCreateInput['companyLocation']['shippingAddress']['provinceCode'] = $provinceCode;
             }
 
+            // Map and attach B2B application custom metafields
+            $companyMetafields = [];
+            $contactMetafields = [];
+
+            if ($application->metafields && is_array($application->metafields)) {
+                foreach ($application->metafields as $fullKey => $meta) {
+                    $parts = explode('.', $fullKey, 2);
+                    $namespace = $parts[0] ?? 'custom';
+                    $key = $parts[1] ?? $fullKey;
+                    
+                    $metafieldInput = [
+                        'namespace' => $namespace,
+                        'key' => $key,
+                        'value' => (string)($meta['value'] ?? ''),
+                        'type' => $meta['type'] ?? 'single_line_text_field'
+                    ];
+
+                    $ownerType = strtolower($meta['owner_type'] ?? '');
+                    if ($ownerType === 'company') {
+                        $companyMetafields[] = $metafieldInput;
+                    } elseif ($ownerType === 'customer' || $ownerType === 'contact') {
+                        $contactMetafields[] = $metafieldInput;
+                    }
+                }
+            }
+
+            if (!empty($companyMetafields)) {
+                $companyCreateInput['company']['metafields'] = $companyMetafields;
+            }
+            if (!empty($contactMetafields)) {
+                $companyCreateInput['companyContact']['metafields'] = $contactMetafields;
+            }
+
             // GraphQL Mutation for Company, Contact and Location Creation
             $companyCreateMutation = '
             mutation companyCreate($input: CompanyCreateInput!) {
@@ -257,7 +295,7 @@ class B2BRegistrationController extends Controller
             }';
 
             Log::info("Attempting B2B Company Creation in Shopify for application ID: {$id}");
-            $res = $this->queryShopifyGraphQL($companyCreateMutation, ['input' => $companyCreateInput]);
+            $res = $this->queryShopifyGraphQL($companyCreateMutation, ['input' => $companyCreateInput], $shopDomain);
 
             $shopifyData = null;
             if ($res['success']) {
@@ -278,7 +316,7 @@ class B2BRegistrationController extends Controller
 
                     // Assign Contact Role as "Location admin"
                     if ($companyId && $locationId && $contactId) {
-                        $this->assignLocationAdminRole($companyId, $contactId, $locationId);
+                        $this->assignLocationAdminRole($companyId, $contactId, $locationId, $shopDomain);
                     }
 
                     $shopifyData = [
@@ -312,18 +350,26 @@ class B2BRegistrationController extends Controller
     /**
      * Helper to make GraphQL requests to Shopify Admin API
      */
-    private function queryShopifyGraphQL(string $query, array $variables = []): array
+    private function queryShopifyGraphQL(string $query, array $variables = [], ?string $shopDomain = null): array
     {
-        $shopDomain = config('shopify.shop_domain');
-        $accessToken = config('shopify.access_token');
+        $accessToken = $this->getAccessToken($shopDomain);
         $apiVersion = config('shopify.api_version', '2026-04');
 
         if (!$shopDomain || !$accessToken) {
-            Log::warning('Shopify shop domain or access token not configured. Skipping live API call.');
+            Log::warning('Shopify shop domain or access token not configured. Skipping live API call.', [
+                'shopDomain' => $shopDomain,
+                'hasToken' => !empty($accessToken)
+            ]);
             return ['success' => false, 'error' => 'Shopify API credentials not configured.'];
         }
 
         $url = "https://{$shopDomain}/admin/api/{$apiVersion}/graphql.json";
+
+        Log::debug('Shopify GraphQL Query Details:', [
+            'shopDomain' => $shopDomain,
+            'accessToken' => substr($accessToken, 0, 12) . '...',
+            'apiVersion' => $apiVersion
+        ]);
 
         try {
             $response = \Illuminate\Support\Facades\Http::withHeaders([
@@ -358,7 +404,7 @@ class B2BRegistrationController extends Controller
     /**
      * Assign Location Admin role to the B2B contact
      */
-    private function assignLocationAdminRole(string $companyId, string $contactId, string $locationId): void
+    private function assignLocationAdminRole(string $companyId, string $contactId, string $locationId, string $shopDomain): void
     {
         // 1. Fetch available contact roles
         $rolesQuery = '
@@ -375,7 +421,7 @@ class B2BRegistrationController extends Controller
           }
         }';
 
-        $res = $this->queryShopifyGraphQL($rolesQuery, ['companyId' => $companyId]);
+        $res = $this->queryShopifyGraphQL($rolesQuery, ['companyId' => $companyId], $shopDomain);
         if (!$res['success']) {
             Log::error('Failed to fetch contact roles from Shopify');
             return;
@@ -420,7 +466,7 @@ class B2BRegistrationController extends Controller
             'companyContactId' => $contactId,
             'companyContactRoleId' => $adminRoleId,
             'companyLocationId' => $locationId
-        ]);
+        ], $shopDomain);
 
         if ($assignRes['success']) {
             $assignData = $assignRes['data']['companyContactAssignRole'];
@@ -538,12 +584,45 @@ class B2BRegistrationController extends Controller
     /**
      * Retrieve all notification settings.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getNotificationSettings(): JsonResponse
+    public function getNotificationSettings(Request $request): JsonResponse
     {
         try {
-            $settings = B2BNotificationSetting::all();
+            $shopDomain = $this->resolveShopDomain($request);
+            $settings = B2BNotificationSetting::where('shop_domain', $shopDomain)->get();
+
+            if ($settings->isEmpty() && $shopDomain) {
+                // Initialize default notification settings for this shop
+                $defaultKeys = [
+                    ['setting_key' => 'b2b_submission_received', 'is_enabled' => true],
+                    ['setting_key' => 'b2b_submission_approved', 'is_enabled' => true],
+                    ['setting_key' => 'b2b_submission_rejected', 'is_enabled' => false],
+                    ['setting_key' => 'quote_submitted', 'is_enabled' => true],
+                    ['setting_key' => 'quote_accepted', 'is_enabled' => true],
+                    ['setting_key' => 'quote_rejected', 'is_enabled' => false],
+                    ['setting_key' => 'quote_requoted', 'is_enabled' => false],
+                    ['setting_key' => 'quote_auto_response', 'is_enabled' => true],
+                    ['setting_key' => 'member_added', 'is_enabled' => true],
+                    ['setting_key' => 'member_role_updated', 'is_enabled' => false],
+                    ['setting_key' => 'list_approved', 'is_enabled' => false],
+                    ['setting_key' => 'list_pending_approval', 'is_enabled' => false],
+                    ['setting_key' => 'credit_low_alert', 'is_enabled' => false],
+                    ['setting_key' => 'credit_assigned', 'is_enabled' => false],
+                ];
+
+                foreach ($defaultKeys as $item) {
+                    B2BNotificationSetting::create([
+                        'shop_domain' => $shopDomain,
+                        'setting_key' => $item['setting_key'],
+                        'is_enabled' => $item['is_enabled']
+                    ]);
+                }
+
+                $settings = B2BNotificationSetting::where('shop_domain', $shopDomain)->get();
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $settings
@@ -567,16 +646,21 @@ class B2BRegistrationController extends Controller
     {
         try {
             $validated = $request->validate([
-                'setting_key' => 'required|string|exists:b2b_notification_settings,setting_key',
+                'setting_key' => 'required|string',
                 'is_enabled' => 'required|boolean',
             ]);
 
-            $setting = B2BNotificationSetting::where('setting_key', $validated['setting_key'])->firstOrFail();
+            $shopDomain = $this->resolveShopDomain($request);
+
+            $setting = B2BNotificationSetting::where('shop_domain', $shopDomain)
+                ->where('setting_key', $validated['setting_key'])
+                ->firstOrFail();
+
             $setting->update([
                 'is_enabled' => $validated['is_enabled']
             ]);
 
-            Log::info("Notification Setting Updated: {$validated['setting_key']} to {$validated['is_enabled']}");
+            Log::info("Notification Setting Updated for {$shopDomain}: {$validated['setting_key']} to {$validated['is_enabled']}");
 
             return response()->json([
                 'success' => true,
@@ -595,10 +679,14 @@ class B2BRegistrationController extends Controller
     /**
      * Get registration form steps config
      */
-    public function getFormConfig(): JsonResponse
+    public function getFormConfig(Request $request): JsonResponse
     {
         try {
-            $setting = \App\Models\B2BQuoteSetting::where('setting_key', 'b2b_form_steps')->first();
+            $shopDomain = $this->resolveShopDomain($request);
+            $setting = \App\Models\B2BQuoteSetting::where('shop_domain', $shopDomain)
+                ->where('setting_key', 'b2b_form_steps')
+                ->first();
+            
             $steps = null;
             if ($setting && $setting->setting_value) {
                 $steps = json_decode($setting->setting_value, true);
@@ -623,11 +711,12 @@ class B2BRegistrationController extends Controller
     public function updateFormConfig(Request $request): JsonResponse
     {
         try {
+            $shopDomain = $this->resolveShopDomain($request);
             $steps = $request->input('steps');
             $val = is_array($steps) ? json_encode($steps) : $steps;
 
             \App\Models\B2BQuoteSetting::updateOrCreate(
-                ['setting_key' => 'b2b_form_steps'],
+                ['shop_domain' => $shopDomain, 'setting_key' => 'b2b_form_steps'],
                 ['setting_value' => $val]
             );
 
@@ -642,5 +731,36 @@ class B2BRegistrationController extends Controller
                 'message' => 'Failed to save form configuration.'
             ], 500);
         }
+    }
+
+    /**
+     * Resolve the active shop domain from request.
+     */
+    private function resolveShopDomain(Request $request): ?string
+    {
+        $shop = $request->header('X-Shop-Domain') 
+            ?? $request->input('shop') 
+            ?? $request->query('shop')
+            ?? config('shopify.shop_domain');
+
+        if ($shop) {
+            $shop = preg_replace('/^https?:\/\//i', '', $shop);
+            $shop = explode('/', $shop)[0];
+        }
+
+        return $shop;
+    }
+
+    /**
+     * Get the active access token for the given shop domain.
+     */
+    private function getAccessToken(?string $shopDomain): ?string
+    {
+        if (!$shopDomain) {
+            return config('shopify.access_token');
+        }
+
+        $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
+        return $shop ? $shop->access_token : config('shopify.access_token');
     }
 }

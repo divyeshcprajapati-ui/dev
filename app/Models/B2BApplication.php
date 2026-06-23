@@ -22,6 +22,7 @@ class B2BApplication extends Model
      * @var array
      */
     protected $fillable = [
+        'shop_domain',
         'first_name',
         'last_name',
         'email',

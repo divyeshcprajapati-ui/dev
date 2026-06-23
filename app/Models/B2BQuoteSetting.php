@@ -12,6 +12,7 @@ class B2BQuoteSetting extends Model
     protected $table = 'b2b_quote_settings';
 
     protected $fillable = [
+        'shop_domain',
         'setting_key',
         'setting_value',
     ];

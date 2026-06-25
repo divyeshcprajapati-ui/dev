@@ -111,15 +111,16 @@ class B2BRegistrationController extends Controller
 
             // Parse metafields if it's sent as a string (JSON) or array
             $metafields = null;
-            Log::info('Raw metafields input: ' . (isset($validatedData['metafields']) ? gettype($validatedData['metafields']) : 'not set'), [
-                'metafields_raw' => $validatedData['metafields'] ?? null
+            $rawMetafields = $request->input('metafields');
+            Log::info('Raw metafields input: ' . (isset($rawMetafields) ? gettype($rawMetafields) : 'not set'), [
+                'metafields_raw' => $rawMetafields
             ]);
 
-            if (isset($validatedData['metafields'])) {
-                if (is_array($validatedData['metafields'])) {
-                    $metafields = $validatedData['metafields'];
-                } elseif (is_string($validatedData['metafields'])) {
-                    $metafields = json_decode($validatedData['metafields'], true);
+            if (isset($rawMetafields)) {
+                if (is_array($rawMetafields)) {
+                    $metafields = $rawMetafields;
+                } elseif (is_string($rawMetafields)) {
+                    $metafields = json_decode($rawMetafields, true);
                     if (json_last_error() !== JSON_ERROR_NONE) {
                         Log::error('Metafields JSON decode error: ' . json_last_error_msg());
                     }
@@ -225,7 +226,13 @@ class B2BRegistrationController extends Controller
             ];
 
             if ($phone) {
-                $companyCreateInput['companyContact']['phone'] = $phone;
+                // Sanitize phone number to E.164 format (e.g. +918798765434) by removing non-digits and keeping the '+' prefix
+                $cleanPhone = preg_replace('/[^\d+]/', '', $phone);
+                if (!str_starts_with($cleanPhone, '+') && str_starts_with($cleanPhone, '91')) {
+                    // Fallback to prepend + if missing for common cases
+                    $cleanPhone = '+' . $cleanPhone;
+                }
+                $companyCreateInput['companyContact']['phone'] = $cleanPhone;
             }
             
             $provinceCode = $this->getProvinceCodeByName($province, $country);
@@ -297,35 +304,55 @@ class B2BRegistrationController extends Controller
             Log::info("Attempting B2B Company Creation in Shopify for application ID: {$id}");
             $res = $this->queryShopifyGraphQL($companyCreateMutation, ['input' => $companyCreateInput], $shopDomain);
 
-            $shopifyData = null;
-            if ($res['success']) {
-                $createData = $res['data']['companyCreate'];
-                if (!empty($createData['userErrors'])) {
-                    Log::warning('Shopify B2B Company creation returned validation errors', ['errors' => $createData['userErrors']]);
-                } else {
-                    $company = $createData['company'];
-                    $companyId = $company['id'];
-                    $locationId = $company['locations']['edges'][0]['node']['id'] ?? null;
-                    $contactId = $company['contacts']['edges'][0]['node']['id'] ?? null;
-
-                    Log::info("Shopify B2B Company created successfully", [
-                        'company_id' => $companyId,
-                        'location_id' => $locationId,
-                        'contact_id' => $contactId
-                    ]);
-
-                    // Assign Contact Role as "Location admin"
-                    if ($companyId && $locationId && $contactId) {
-                        $this->assignLocationAdminRole($companyId, $contactId, $locationId, $shopDomain);
-                    }
-
-                    $shopifyData = [
-                        'shopify_company_id' => $companyId,
-                        'shopify_location_id' => $locationId,
-                        'shopify_contact_id' => $contactId
-                    ];
-                }
+            if (!$res['success']) {
+                $errorMessage = $res['error'] ?? (isset($res['errors']) ? json_encode($res['errors']) : 'Unknown Shopify error');
+                Log::error("Shopify GraphQL B2B Company creation failed: {$errorMessage}");
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shopify company creation failed: ' . $errorMessage
+                ], 500);
             }
+
+            $shopifyData = null;
+            $createData = $res['data']['companyCreate'] ?? null;
+            if (!$createData) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid response structure from Shopify'
+                ], 500);
+            }
+
+            if (!empty($createData['userErrors'])) {
+                Log::warning('Shopify B2B Company creation returned validation errors', ['errors' => $createData['userErrors']]);
+                $errorsList = collect($createData['userErrors'])->map(fn($e) => $e['message'])->implode(', ');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shopify validation errors: ' . $errorsList,
+                    'errors' => $createData['userErrors']
+                ], 422);
+            }
+
+            $company = $createData['company'];
+            $companyId = $company['id'];
+            $locationId = $company['locations']['edges'][0]['node']['id'] ?? null;
+            $contactId = $company['contacts']['edges'][0]['node']['id'] ?? null;
+
+            Log::info("Shopify B2B Company created successfully", [
+                'company_id' => $companyId,
+                'location_id' => $locationId,
+                'contact_id' => $contactId
+            ]);
+
+            // Assign Contact Role as "Location admin"
+            if ($companyId && $locationId && $contactId) {
+                $this->assignLocationAdminRole($companyId, $contactId, $locationId, $shopDomain);
+            }
+
+            $shopifyData = [
+                'shopify_company_id' => $companyId,
+                'shopify_location_id' => $locationId,
+                'shopify_contact_id' => $contactId
+            ];
 
             // Update local lead status
             $application->update(['status' => 'Approved']);

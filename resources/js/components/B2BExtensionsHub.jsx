@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Page,
     Card,
@@ -19,9 +19,10 @@ import B2BRegistrationForm from './B2BRegistrationForm';
 
 export default function B2BExtensionsHub() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [selectedTab, setSelectedTab] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
-    const [currentView, setCurrentView] = useState('hub');
+    const [currentView, setCurrentView] = useState(location.pathname === '/b2b-register' ? 'b2b-registration' : 'hub');
 
     const handleTabChange = (selectedTabIndex) => {
         setSelectedTab(selectedTabIndex);
@@ -182,7 +183,7 @@ export default function B2BExtensionsHub() {
     });
 
     if (currentView === 'b2b-registration') {
-        return <B2BRegistrationForm onBack={() => setCurrentView('hub')} />;
+        return <B2BRegistrationForm onBack={() => { setCurrentView('hub'); navigate('/'); }} />;
     }
 
     return (

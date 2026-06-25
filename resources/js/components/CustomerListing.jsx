@@ -234,7 +234,7 @@ export default function CustomerListing() {
               <Text variant="headingSm" as="span">B2B/Wholesale Company registration form</Text>
               <Badge tone="info">1/1</Badge>
             </InlineStack>
-            <Button size="medium">Edit form</Button>
+            <Button size="medium" onClick={() => navigate('/b2b-register')}>Edit form</Button>
           </div>
         </Card>
 

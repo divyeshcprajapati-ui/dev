@@ -29,9 +29,16 @@ class QuoteSettingsController extends Controller
         $settings = $request->input('settings', []);
 
         foreach ($settings as $key => $value) {
+            $dbValue = $value;
+            if (is_bool($value)) {
+                $dbValue = $value ? 'true' : 'false';
+            } elseif (is_array($value)) {
+                $dbValue = json_encode($value);
+            }
+
             B2BQuoteSetting::updateOrCreate(
                 ['setting_key' => $key],
-                ['setting_value' => is_array($value) ? json_encode($value) : $value]
+                ['setting_value' => $dbValue]
             );
         }
 

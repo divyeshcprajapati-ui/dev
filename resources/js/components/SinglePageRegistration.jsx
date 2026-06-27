@@ -946,7 +946,7 @@ export default function SinglePageRegistration() {
                                                                         value={formData.phone}
                                                                         onChange={(e) => handleFormChange('phone', e.target.value)}
                                                                         onBlur={handleBlur}
-                                                                        style={{ ...getInputStyle(errors.phone), flex: 1 }}
+                                                                        style={{ ...getInputStyle(errors.phone), flex: 1, width: 'auto', minWidth: 0 }}
                                                                     />
                                                                 </div>
                                                                 {errors.phone && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{errors.phone}</span>}

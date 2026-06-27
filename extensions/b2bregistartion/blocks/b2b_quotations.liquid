@@ -1,0 +1,299 @@
+<div class="b2b-quotations-wrapper" style="max-width: 1200px; margin: 30px auto; padding: 0 15px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  {%- if customer -%}
+    <div class="b2b-quotations-card" style="background: #fff; border: 1px solid #e1e3e5; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <h2 style="margin-top: 0; font-size: 24px; font-weight: 800; color: #1a1a1a;">My Quotations</h2>
+
+      <!-- Navigation Tabs -->
+      <div class="b2b-tabs-nav" style="display: flex; gap: 20px; border-bottom: 2px solid #f1f5f9; margin-bottom: 20px; overflow-x: auto; padding-bottom: 8px;">
+        <button type="button" class="b2b-tab-btn active" data-status="all">All</button>
+        <button type="button" class="b2b-tab-btn" data-status="pending">Under review</button>
+        <button type="button" class="b2b-tab-btn" data-status="sent">Pricing provided</button>
+        <button type="button" class="b2b-tab-btn" data-status="approved">Accepted</button>
+        <button type="button" class="b2b-tab-btn" data-status="rejected">Reject</button>
+        <button type="button" class="b2b-tab-btn" data-status="deal closed">Deal closed</button>
+      </div>
+
+      <!-- Main Listing Table -->
+      <div class="b2b-table-container" style="overflow-x: auto;">
+        <table id="b2b-quotes-table" style="width: 100%; border-collapse: collapse; text-align: left; min-width: 600px;">
+          <thead>
+            <tr style="border-bottom: 2px solid #f1f5f9; color: #64748b; font-size: 13px; text-transform: uppercase;">
+              <th style="padding: 12px 8px;">Quote ID</th>
+              <th style="padding: 12px 8px;">Date</th>
+              <th style="padding: 12px 8px;">Product</th>
+              <th style="padding: 12px 8px;">Quoted Price</th>
+              <th style="padding: 12px 8px;">Qty</th>
+              <th style="padding: 12px 8px;">Total</th>
+              <th style="padding: 12px 8px;">Status</th>
+              <th style="padding: 12px 8px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="b2b-quotes-list-body">
+            <tr>
+              <td colspan="8" style="text-align: center; padding: 30px; color: #94a3b8;">Loading quotations...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Detail View Area -->
+      <div id="b2b-quote-detail-section" style="display: none; border-top: 1px solid #ebebeb; margin-top: 30px; padding-top: 24px;">
+        <button type="button" id="b2b-back-to-list" style="background: none; border: none; color: #64748b; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0 0 20px 0;">
+          &larr; Back to list
+        </button>
+
+        <div class="b2b-detail-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px;">
+          <!-- Left side detail -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; display: flex; gap: 16px; align-items: center;">
+              <img id="detail-product-img" src="" alt="Product Image" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <div style="flex: 1;">
+                <h4 id="detail-product-name" style="margin: 0; font-size: 18px; font-weight: bold; color: #1a1a1a;"></h4>
+                <p id="detail-original-price" style="margin: 6px 0 0 0; font-size: 14px; color: #64748b;"></p>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 14px; color: #475569;">Qty: <strong id="detail-qty" style="color: #1a1a1a;"></strong></div>
+                <div style="font-size: 14px; color: #475569; margin-top: 4px;">Proposed Price: <strong id="detail-proposed-price" style="color: #1a1a1a;"></strong></div>
+                <div style="font-size: 16px; fontWeight: bold; color: #1a1a1a; margin-top: 8px;">Subtotal: <strong id="detail-subtotal"></strong></div>
+              </div>
+            </div>
+            
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 20px;">
+              <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; text-transform: uppercase; color: #64748b;">Shipping Details</h5>
+              <p id="detail-shipping-address" style="margin: 0; font-size: 14px; line-height: 1.5; color: #333;"></p>
+            </div>
+          </div>
+
+          <!-- Right side status / actions -->
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h5 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; text-transform: uppercase; color: #64748b;">Quote Status</h5>
+              <span id="detail-status-badge" style="padding: 6px 12px; border-radius: 12px; font-weight: bold; font-size: 13px; display: inline-block;"></span>
+              <p id="detail-expiration" style="margin: 15px 0 0 0; font-size: 13px; color: #ef4444; font-weight: 500;"></p>
+            </div>
+
+            <div id="detail-action-buttons-wrapper" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+              <!-- Action buttons will be injected dynamically based on status -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {%- else -%}
+    <div style="text-align: center; padding: 50px 20px; background: #fff; border: 1px solid #e1e3e5; border-radius: 12px;">
+      <h3 style="margin-bottom: 12px; color: #1a1a1a;">Please Log In</h3>
+      <p style="color: #6b7280; margin-bottom: 24px;">You must be logged in to view and manage your quotations.</p>
+      <a href="/account/login" class="button" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold;">Log In</a>
+    </div>
+  {%- endif -%}
+</div>
+
+<style>
+  .b2b-tab-btn {
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 6px;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .b2b-tab-btn:hover {
+    background: #f1f5f9;
+    color: #1a1a1a;
+  }
+  .b2b-tab-btn.active {
+    background: #1a1a1a;
+    color: #fff;
+  }
+</style>
+
+<script>
+  (function() {
+    const API_BASE_URL = 'https://onshore-embezzle-skinny.ngrok-free.dev';
+    const shopDomain = '{{ shop.permanent_domain }}';
+    const customerEmail = '{{ customer.email }}';
+
+    if (!customerEmail) return;
+
+    let quotesData = [];
+    let activeFilter = 'all';
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const listBody = document.getElementById('b2b-quotes-list-body');
+      const tableContainer = document.querySelector('.b2b-table-container');
+      const detailSection = document.getElementById('b2b-quote-detail-section');
+      const backBtn = document.getElementById('b2b-back-to-list');
+      const tabBtns = document.querySelectorAll('.b2b-tab-btn');
+
+      async function fetchQuotes() {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/b2b/quotes?email=${customerEmail}&shop=${shopDomain}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+          });
+          const result = await res.json();
+          if (result.success && Array.isArray(result.data)) {
+            quotesData = result.data;
+            renderQuotes();
+          }
+        } catch (e) {
+          console.error(e);
+          listBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 30px; color: #ef4444;">Failed to load quotations.</td></tr>';
+        }
+      }
+
+      function renderQuotes() {
+        listBody.innerHTML = '';
+        const filtered = quotesData.filter(q => {
+          if (activeFilter === 'all') return true;
+          if (activeFilter === 'pending') return q.status.toLowerCase() === 'pending';
+          if (activeFilter === 'sent') return q.status.toLowerCase() === 'sent';
+          if (activeFilter === 'approved') return q.status.toLowerCase() === 'approved';
+          if (activeFilter === 'rejected') return q.status.toLowerCase() === 'rejected';
+          if (activeFilter === 'deal closed') return q.status.toLowerCase() === 'deal closed';
+          return true;
+        });
+
+        if (filtered.length === 0) {
+          listBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 30px; color: #94a3b8;">No quotations found.</td></tr>';
+          return;
+        }
+
+        filtered.forEach(q => {
+          const tr = document.createElement('tr');
+          tr.style.borderBottom = '1px solid #f1f5f9';
+          
+          let badgeBg = '#f1f5f9';
+          let badgeColor = '#475569';
+          if (q.status === 'Approved') { badgeBg = '#dcfce7'; badgeColor = '#166534'; }
+          else if (q.status === 'Sent') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; }
+          else if (q.status === 'Rejected') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; }
+
+          tr.innerHTML = `
+            <td style="padding: 16px 8px; font-weight: bold;">Quote ${q.quote_number}</td>
+            <td style="padding: 16px 8px; color: #64748b;">${new Date(q.created_at).toLocaleDateString()}</td>
+            <td style="padding: 16px 8px;">${q.product_name}</td>
+            <td style="padding: 16px 8px;">$${parseFloat(q.quoted_price).toFixed(2)} USD</td>
+            <td style="padding: 16px 8px;">${q.quantity}</td>
+            <td style="padding: 16px 8px; font-weight: bold;">$${parseFloat(q.subtotal).toFixed(2)} USD</td>
+            <td style="padding: 16px 8px;">
+              <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; background-color: ${badgeBg}; color: ${badgeColor};">${q.status}</span>
+            </td>
+            <td style="padding: 16px 8px;">
+              <button class="btn-detail" data-id="${q.id}" style="background: #f1f5f9; border: none; border-radius: 4px; padding: 6px 12px; font-weight: 600; cursor: pointer; color: #475569;">Details</button>
+            </td>
+          `;
+          listBody.appendChild(tr);
+        });
+
+        // Detail handlers
+        document.querySelectorAll('.btn-detail').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const quoteId = parseInt(this.dataset.id);
+            const quote = quotesData.find(q => q.id === quoteId);
+            if (quote) showDetail(quote);
+          });
+        });
+      }
+
+      function showDetail(q) {
+        tableContainer.style.display = 'none';
+        detailSection.style.display = 'block';
+
+        // Load content
+        document.getElementById('detail-product-img').src = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png";
+        document.getElementById('detail-product-name').textContent = q.product_name;
+        document.getElementById('detail-original-price').textContent = `Original unit price: $${parseFloat(q.original_price).toFixed(2)} USD`;
+        document.getElementById('detail-qty').textContent = q.quantity;
+        document.getElementById('detail-proposed-price').textContent = `$${parseFloat(q.quoted_price).toFixed(2)} USD`;
+        document.getElementById('detail-subtotal').textContent = `$${parseFloat(q.subtotal).toFixed(2)} USD`;
+        document.getElementById('detail-shipping-address').textContent = q.shipping_address;
+
+        const badge = document.getElementById('detail-status-badge');
+        badge.textContent = q.status;
+        let badgeBg = '#f1f5f9';
+        let badgeColor = '#475569';
+        if (q.status === 'Approved') { badgeBg = '#dcfce7'; badgeColor = '#166534'; }
+        else if (q.status === 'Sent') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; }
+        else if (q.status === 'Rejected') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; }
+        badge.style.backgroundColor = badgeBg;
+        badge.style.color = badgeColor;
+
+        const expEl = document.getElementById('detail-expiration');
+        if (q.expiration_date) {
+          expEl.textContent = `Expiration date: ${q.expiration_date}`;
+          expEl.style.display = 'block';
+        } else {
+          expEl.style.display = 'none';
+        }
+
+        // Action buttons
+        const actionWrapper = document.getElementById('detail-action-buttons-wrapper');
+        actionWrapper.innerHTML = '';
+        if (q.status === 'Sent') {
+          actionWrapper.innerHTML = `
+            <button id="btn-approve" style="padding: 12px; background: #008060; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">Approve Proposal</button>
+            <button id="btn-reject" style="padding: 12px; background: #ea580c; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">Reject Proposal</button>
+          `;
+
+          document.getElementById('btn-approve').addEventListener('click', () => updateStatus(q.id, 'Approved'));
+          document.getElementById('btn-reject').addEventListener('click', () => updateStatus(q.id, 'Rejected'));
+        }
+      }
+
+      async function updateStatus(id, newStatus) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/b2b/quotes/${id}/update`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({ status: newStatus })
+          });
+          const result = await res.json();
+          if (result.success) {
+            alert(`Quote status updated to: ${newStatus}`);
+            fetchQuotes();
+            // Go back
+            detailSection.style.display = 'none';
+            tableContainer.style.display = 'block';
+          } else {
+            alert('Failed to update quote status.');
+          }
+        } catch (e) {
+          console.error(e);
+          alert('An error occurred during submission.');
+        }
+      }
+
+      backBtn.addEventListener('click', function() {
+        detailSection.style.display = 'none';
+        tableContainer.style.display = 'block';
+      });
+
+      tabBtns.forEach(tab => {
+        tab.addEventListener('click', function() {
+          tabBtns.forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+          activeFilter = this.dataset.status;
+          renderQuotes();
+        });
+      });
+
+      // Initial Fetch
+      fetchQuotes();
+    });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "B2B Quotations Portal",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}

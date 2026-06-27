@@ -18,10 +18,19 @@ class B2BQuoteController extends Controller
     {
         try {
             $status = $request->query('status');
+            $email = $request->query('email');
+            $shop = $request->query('shop');
+            
             $query = B2BQuote::orderBy('created_at', 'desc');
 
             if ($status && $status !== 'all') {
                 $query->where('status', ucfirst($status));
+            }
+            if ($email) {
+                $query->where('customer_email', $email);
+            }
+            if ($shop) {
+                $query->where('shop_domain', $shop);
             }
 
             $quotes = $query->get();
@@ -66,6 +75,7 @@ class B2BQuoteController extends Controller
     {
         try {
             $validated = $request->validate([
+                'shop_domain' => 'nullable|string',
                 'product_name' => 'required|string',
                 'original_price' => 'required|numeric',
                 'quoted_price' => 'required|numeric',
@@ -93,7 +103,7 @@ class B2BQuoteController extends Controller
                 'success' => true,
                 'message' => 'Quote request submitted successfully.',
                 'data' => $quote
-            ], 201);
+            ], 200);
         } catch (Exception $e) {
             Log::error('Error creating quote: ' . $e->getMessage());
             return response()->json([

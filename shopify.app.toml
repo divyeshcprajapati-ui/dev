@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-name = "b2bDev"
+name = "B2B Wholesale & Custom Quotes"
 client_id = "ff93653f637a8a6b5a88fee3766d259b"
 application_url = "https://onshore-embezzle-skinny.ngrok-free.dev"
 embedded = true

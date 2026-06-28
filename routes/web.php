@@ -39,5 +39,5 @@ Route::get('/', function (Request $request) {
 
 Route::get('/{any}', function () {
     return view('app');
-})->where('any', '.*');
+})->where('any', '^(?!log-viewer|api|webhooks).*$');
 

@@ -14,7 +14,11 @@ return new class extends Migration
     public function up()
     {
         Schema::table('b2b_applications', function (Blueprint $table) {
-            $table->json('metafields')->nullable();
+            $table->text('metafields')->nullable();
+            $table->string('shopify_company_id')->nullable();
+            $table->string('shopify_location_id')->nullable();
+            $table->string('shopify_contact_id')->nullable();
+            $table->string('shopify_customer_id')->nullable();
         });
     }
 
@@ -26,7 +30,7 @@ return new class extends Migration
     public function down()
     {
         Schema::table('b2b_applications', function (Blueprint $table) {
-            $table->dropColumn('metafields');
+            $table->dropColumn(['metafields', 'shopify_company_id', 'shopify_location_id', 'shopify_contact_id', 'shopify_customer_id']);
         });
     }
 };

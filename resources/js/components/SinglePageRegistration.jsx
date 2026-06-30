@@ -60,7 +60,7 @@ export default function SinglePageRegistration() {
                 { id: 'company_city', name: 'Company city', type: 'text', required: true, metafieldType: 'none' },
                 { id: 'province', name: 'Province', type: 'text', required: true, metafieldType: 'none' },
                 { id: 'zip', name: 'Zip code / Postal code', type: 'text', required: true, metafieldType: 'none' },
-                { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true, metafieldType: 'company', metafieldNamespace: 'custom', metafieldKey: 'tax_id', metafieldValueType: 'single_line_text_field' },
+                { id: 'tax_id', name: 'Tax ID / VAT Number', type: 'text', required: true, metafieldType: 'none', metafieldNamespace: 'custom', metafieldKey: 'tax_id', metafieldValueType: 'single_line_text_field' },
                 { id: 'document_upload', name: 'Business License / Document Upload', type: 'file', required: false, metafieldType: 'none' },
                 { id: 'message', name: 'Message', type: 'textarea', required: false, metafieldType: 'none' },
                 { id: 'number', name: 'Number', type: 'number', required: false, metafieldType: 'none' }

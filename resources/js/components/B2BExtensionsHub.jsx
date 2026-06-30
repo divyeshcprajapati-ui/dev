@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { quoteService } from '../services/quoteService';
 import {
     Page,
     Card,
@@ -23,6 +24,23 @@ export default function B2BExtensionsHub() {
     const [selectedTab, setSelectedTab] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentView, setCurrentView] = useState(location.pathname === '/b2b-register' ? 'b2b-registration' : 'hub');
+    const [isQuoteActive, setIsQuoteActive] = useState(false);
+
+    useEffect(() => {
+        const checkQuoteStatus = async () => {
+            try {
+                const res = await quoteService.getSettings();
+                if (res && res.success && res.data) {
+                    const data = res.data;
+                    const active = (data.productPage === 'true' || data.productPage === true || data.cartPage === 'true' || data.cartPage === true);
+                    setIsQuoteActive(active);
+                }
+            } catch (e) {
+                console.error("Error loading quote settings in hub", e);
+            }
+        };
+        checkQuoteStatus();
+    }, []);
 
     const handleTabChange = (selectedTabIndex) => {
         setSelectedTab(selectedTabIndex);
@@ -155,7 +173,7 @@ export default function B2BExtensionsHub() {
             id: 'quote-requests',
             title: 'Quote requests',
             description: 'Manage your quote settings and review all quote submissions.',
-            status: 'Inactive',
+            status: isQuoteActive ? 'Active' : 'Inactive',
             isPlus: false,
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',

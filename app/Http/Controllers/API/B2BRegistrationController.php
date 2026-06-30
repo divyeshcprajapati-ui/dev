@@ -269,9 +269,6 @@ class B2BRegistrationController extends Controller
             if (!empty($companyMetafields)) {
                 $companyCreateInput['company']['metafields'] = $companyMetafields;
             }
-            if (!empty($contactMetafields)) {
-                $companyCreateInput['companyContact']['metafields'] = $contactMetafields;
-            }
 
             // GraphQL Mutation for Company, Contact and Location Creation
             $companyCreateMutation = '
@@ -290,6 +287,9 @@ class B2BRegistrationController extends Controller
                     edges {
                       node {
                         id
+                        customer {
+                          id
+                        }
                       }
                     }
                   }
@@ -336,11 +336,40 @@ class B2BRegistrationController extends Controller
             $companyId = $company['id'];
             $locationId = $company['locations']['edges'][0]['node']['id'] ?? null;
             $contactId = $company['contacts']['edges'][0]['node']['id'] ?? null;
+            $customerId = $company['contacts']['edges'][0]['node']['customer']['id'] ?? null;
+
+            // Update customer metafields if present
+            if ($customerId && !empty($contactMetafields)) {
+                $customerUpdateMutation = '
+                mutation customerUpdate($input: CustomerInput!) {
+                  customerUpdate(input: $input) {
+                    customer {
+                      id
+                    }
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }';
+
+                $customerInput = [
+                    'id' => $customerId,
+                    'metafields' => $contactMetafields
+                ];
+
+                Log::info("Updating customer metafields for customer ID: {$customerId}");
+                $customerRes = $this->queryShopifyGraphQL($customerUpdateMutation, ['input' => $customerInput], $shopDomain);
+                if (!$customerRes['success']) {
+                    Log::error("Failed to update customer metafields: " . json_encode($customerRes['errors'] ?? 'Unknown error'));
+                }
+            }
 
             Log::info("Shopify B2B Company created successfully", [
                 'company_id' => $companyId,
                 'location_id' => $locationId,
-                'contact_id' => $contactId
+                'contact_id' => $contactId,
+                'customer_id' => $customerId
             ]);
 
             // Assign Contact Role as "Location admin"
@@ -354,8 +383,14 @@ class B2BRegistrationController extends Controller
                 'shopify_contact_id' => $contactId
             ];
 
-            // Update local lead status
-            $application->update(['status' => 'Approved']);
+            // Update local lead status and store Shopify IDs
+            $application->update([
+                'status' => 'Approved',
+                'shopify_company_id' => $companyId,
+                'shopify_location_id' => $locationId,
+                'shopify_contact_id' => $contactId,
+                'shopify_customer_id' => $customerId
+            ]);
 
             Log::info("B2B Application Approved: ID {$id}");
 
@@ -740,12 +775,24 @@ class B2BRegistrationController extends Controller
         try {
             $shopDomain = $this->resolveShopDomain($request);
             $steps = $request->input('steps');
+            
+            Log::info("updateFormConfig request received", [
+                'shop' => $shopDomain,
+                'has_steps' => isset($steps),
+                'steps_count' => is_array($steps) ? count($steps) : 'not an array'
+            ]);
+
             $val = is_array($steps) ? json_encode($steps) : $steps;
 
-            \App\Models\B2BQuoteSetting::updateOrCreate(
+            $setting = \App\Models\B2BQuoteSetting::updateOrCreate(
                 ['shop_domain' => $shopDomain, 'setting_key' => 'b2b_form_steps'],
                 ['setting_value' => $val]
             );
+
+            Log::info("Form configuration saved successfully to database", [
+                'id' => $setting->id,
+                'shop' => $setting->shop_domain
+            ]);
 
             return response()->json([
                 'success' => true,

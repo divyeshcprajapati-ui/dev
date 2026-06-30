@@ -38,6 +38,10 @@ class B2BApplication extends Model
         'notes',
         'status',
         'metafields',
+        'shopify_company_id',
+        'shopify_location_id',
+        'shopify_contact_id',
+        'shopify_customer_id',
     ];
 
     /**

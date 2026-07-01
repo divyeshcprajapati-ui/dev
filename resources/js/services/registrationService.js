@@ -123,6 +123,23 @@ export const registrationService = {
      */
     saveFormConfig: async (steps) => {
         return apiClient.post('/b2b/form-config/update', { steps });
+    },
+
+    /**
+     * Get the active plan and selected modules for the shop.
+     * @returns {Promise<Object>}
+     */
+    getShopPlan: async () => {
+        return apiClient.get('/b2b/shop-plan');
+    },
+
+    /**
+     * Update the active plan and selected modules for the shop.
+     * @param {Object} data - { active_plan, selected_modules }
+     * @returns {Promise<Object>}
+     */
+    updateShopPlan: async (data) => {
+        return apiClient.post('/b2b/shop-plan/update', data);
     }
 };
 

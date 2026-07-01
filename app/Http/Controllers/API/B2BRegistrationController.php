@@ -287,9 +287,6 @@ class B2BRegistrationController extends Controller
                     edges {
                       node {
                         id
-                        customer {
-                          id
-                        }
                       }
                     }
                   }
@@ -639,6 +636,93 @@ class B2BRegistrationController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve subscription pricing.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Retrieve the active plan and selected modules for a shop.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getShopPlan(Request $request): JsonResponse
+    {
+        try {
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
+
+            $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop not found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'active_plan' => $shop->active_plan ?? 'free',
+                    'selected_modules' => $shop->selected_modules ?? []
+                ]
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error fetching shop plan: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve shop plan.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update the active plan and selected modules for a shop.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateShopPlan(Request $request): JsonResponse
+    {
+        try {
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
+
+            $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop not found.'
+                ], 404);
+            }
+
+            $shop->active_plan = $request->input('active_plan', 'free');
+            $shop->selected_modules = $request->input('selected_modules', []);
+            $shop->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shop plan and modules updated successfully.',
+                'data' => [
+                    'active_plan' => $shop->active_plan,
+                    'selected_modules' => $shop->selected_modules
+                ]
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error updating shop plan: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update shop plan.'
             ], 500);
         }
     }

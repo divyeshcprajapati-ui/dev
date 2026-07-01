@@ -159,7 +159,7 @@ export default function B2BExtensionsHub() {
             id: 'csv-upload-order',
             title: 'CSV upload order',
             description: 'Allows wholesale buyers to upload large order sheets via CSV for instant cart generation.',
-            status: 'Active',
+            status: 'Inactive',
             isPlus: false,
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)',

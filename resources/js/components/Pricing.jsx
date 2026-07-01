@@ -16,23 +16,75 @@ export default function Pricing() {
     const [modules, setModules] = useState([]);
     const [checkedModules, setCheckedModules] = useState({});
     const [loading, setLoading] = useState(true);
+    const [activePlan, setActivePlan] = useState('free');
+    const [savingPlan, setSavingPlan] = useState(false);
 
     const fetchPricing = async () => {
         setLoading(true);
         try {
-            const response = await registrationService.getSubscriptions();
-            const data = response && response.success ? response.data : (Array.isArray(response) ? response : []);
-            setModules(data);
+            const [subResponse, planResponse] = await Promise.all([
+                registrationService.getSubscriptions(),
+                registrationService.getShopPlan()
+            ]);
 
-            const initialChecked = {};
-            data.forEach(mod => {
-                initialChecked[mod.subscription_key] = true;
-            });
-            setCheckedModules(initialChecked);
+            const subData = subResponse && subResponse.success ? subResponse.data : (Array.isArray(subResponse) ? subResponse : []);
+            setModules(subData);
+
+            if (planResponse && planResponse.success && planResponse.data) {
+                setActivePlan(planResponse.data.active_plan || 'free');
+                const selectedList = planResponse.data.selected_modules || [];
+                const checkedState = {};
+                subData.forEach(mod => {
+                    checkedState[mod.subscription_key] = selectedList.includes(mod.subscription_key);
+                });
+                setCheckedModules(checkedState);
+            } else {
+                const initialChecked = {};
+                subData.forEach(mod => {
+                    initialChecked[mod.subscription_key] = true;
+                });
+                setCheckedModules(initialChecked);
+            }
         } catch (err) {
             console.error("Failed to load pricing subscriptions", err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handlePlanSelect = async (planName) => {
+        setSavingPlan(true);
+        try {
+            const allSelectedModules = Object.keys(checkedModules).filter(key => checkedModules[key]);
+
+            const res = await registrationService.updateShopPlan({
+                active_plan: planName,
+                selected_modules: allSelectedModules
+            });
+
+            if (res && res.success) {
+                setActivePlan(planName);
+                if (typeof shopify !== 'undefined' && shopify.toast) {
+                    shopify.toast.show(`Successfully updated to ${planName.charAt(0).toUpperCase() + planName.slice(1)} plan`);
+                } else {
+                    alert(`Successfully updated subscription to the ${planName.charAt(0).toUpperCase() + planName.slice(1)} plan!`);
+                }
+            } else {
+                if (typeof shopify !== 'undefined' && shopify.toast) {
+                    shopify.toast.show('Failed to update plan', { isError: true });
+                } else {
+                    alert("Failed to update plan.");
+                }
+            }
+        } catch (err) {
+            console.error("Error updating plan:", err);
+            if (typeof shopify !== 'undefined' && shopify.toast) {
+                shopify.toast.show('Error updating plan selection', { isError: true });
+            } else {
+                alert("Error updating plan selection.");
+            }
+        } finally {
+            setSavingPlan(false);
         }
     };
 
@@ -302,14 +354,16 @@ export default function Pricing() {
                                 </BlockStack>
 
                                 <div style={{ marginTop: 'auto', paddingTop: '40px' }}>
-                                    <Button size="large" fullWidth disabled>Active Plan</Button>
+                                    <Button size="large" fullWidth disabled={activePlan === 'free'} onClick={() => handlePlanSelect('free')}>
+                                        {activePlan === 'free' ? 'Active Plan' : 'Switch to Free'}
+                                    </Button>
                                 </div>
                             </div>
                         </div>
 
                         {/* Plan 2: Grow */}
                         <div style={{ flex: '1 1 270px', maxWidth: '320px' }}>
-                            <div className="plan-card">
+                            <div className={`plan-card ${activePlan === 'grow' ? 'highlighted' : ''}`}>
                                 <BlockStack gap="400">
                                     <div>
                                         <Text variant="headingMd" as="h3">Grow Plan</Text>
@@ -355,8 +409,14 @@ export default function Pricing() {
                                 </BlockStack>
 
                                 <div style={{ marginTop: 'auto', paddingTop: '40px' }}>
-                                    <Button size="large" variant="primary" fullWidth onClick={() => alert("Redirecting to select Grow plan...")}>
-                                        Start Grow Trial
+                                    <Button 
+                                        size="large" 
+                                        variant={activePlan === 'grow' ? 'secondary' : 'primary'} 
+                                        fullWidth 
+                                        loading={savingPlan && activePlan === 'grow'}
+                                        onClick={() => handlePlanSelect('grow')}
+                                    >
+                                        {activePlan === 'grow' ? 'Active (Update Modules)' : 'Start Grow Trial'}
                                     </Button>
                                 </div>
                             </div>
@@ -364,7 +424,7 @@ export default function Pricing() {
 
                         {/* Plan 3: Advanced */}
                         <div style={{ flex: '1 1 270px', maxWidth: '320px' }}>
-                            <div className="plan-card highlighted">
+                            <div className={`plan-card ${activePlan === 'advanced' ? 'highlighted' : ''}`}>
                                 <div className="popular-badge">MOST POPULAR</div>
                                 
                                 <BlockStack gap="400">
@@ -412,8 +472,15 @@ export default function Pricing() {
                                 </BlockStack>
 
                                 <div style={{ marginTop: 'auto', paddingTop: '40px' }}>
-                                    <Button size="large" variant="primary" tone="success" fullWidth onClick={() => alert("Redirecting to select Advanced plan...")}>
-                                        Start Advanced Trial
+                                    <Button 
+                                        size="large" 
+                                        variant={activePlan === 'advanced' ? 'secondary' : 'primary'} 
+                                        tone={activePlan === 'advanced' ? undefined : 'success'} 
+                                        fullWidth 
+                                        loading={savingPlan && activePlan === 'advanced'}
+                                        onClick={() => handlePlanSelect('advanced')}
+                                    >
+                                        {activePlan === 'advanced' ? 'Active (Update Modules)' : 'Start Advanced Trial'}
                                     </Button>
                                 </div>
                             </div>
@@ -421,7 +488,7 @@ export default function Pricing() {
 
                         {/* Plan 4: Shopify Plus */}
                         <div style={{ flex: '1 1 270px', maxWidth: '320px' }}>
-                            <div className="plan-card">
+                            <div className={`plan-card ${activePlan === 'plus' ? 'highlighted' : ''}`}>
                                 <BlockStack gap="400">
                                     <div>
                                         <Text variant="headingMd" as="h3">Shopify Plus</Text>
@@ -467,8 +534,14 @@ export default function Pricing() {
                                 </BlockStack>
 
                                 <div style={{ marginTop: 'auto', paddingTop: '40px' }}>
-                                    <Button size="large" variant="primary" fullWidth onClick={() => alert("Redirecting to select Plus plan...")}>
-                                        Start Plus Trial
+                                    <Button 
+                                        size="large" 
+                                        variant={activePlan === 'plus' ? 'secondary' : 'primary'} 
+                                        fullWidth 
+                                        loading={savingPlan && activePlan === 'plus'}
+                                        onClick={() => handlePlanSelect('plus')}
+                                    >
+                                        {activePlan === 'plus' ? 'Active (Update Modules)' : 'Start Plus Trial'}
                                     </Button>
                                 </div>
                             </div>

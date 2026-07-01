@@ -25,5 +25,16 @@ class ShopifyShop extends Model
         'shop_domain',
         'shop_name',
         'access_token',
+        'active_plan',
+        'selected_modules',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'selected_modules' => 'array',
     ];
 }

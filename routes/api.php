@@ -34,6 +34,8 @@ Route::post('/b2b/applications/{id}/reject', [B2BRegistrationController::class, 
 
 // B2B admin subscriptions pricing management routes
 Route::get('/b2b/subscriptions', [B2BRegistrationController::class, 'getSubscriptions']);
+Route::get('/b2b/shop-plan', [B2BRegistrationController::class, 'getShopPlan']);
+Route::post('/b2b/shop-plan/update', [B2BRegistrationController::class, 'updateShopPlan']);
 
 // B2B quote settings routes
 Route::get('/b2b/quote-settings', [QuoteSettingsController::class, 'getSettings']);

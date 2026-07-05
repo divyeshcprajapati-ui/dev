@@ -1397,7 +1397,7 @@ export default function B2BRegistrationForm({ onBack }) {
                                                                     <select 
                                                                         value={previewFormData.phoneCode}
                                                                         onChange={(e) => handlePreviewChange('phoneCode', e.target.value)}
-                                                                        style={{ padding: '10px', border: '1px solid #c9cccf', borderRadius: '6px', backgroundColor: '#fafafa', fontSize: '14px', width: '95px', cursor: 'pointer' }}
+                                                                        style={{ padding: '10px', border: '1px solid #c9cccf', borderRadius: '6px', backgroundColor: '#fafafa', fontSize: '14px', width: '110px', minWidth: '110px', flexShrink: 0, cursor: 'pointer' }}
                                                                     >
                                                                         {countriesList.length > 0 ? (
                                                                             countriesList.map(country => {

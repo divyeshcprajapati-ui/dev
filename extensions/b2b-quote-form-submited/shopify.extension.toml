@@ -1,0 +1,15 @@
+[[extensions]]
+name = "B2b Quote Form Submited"
+handle = "b2b-quote-form-submited"
+type = "flow_trigger"
+uid = "5cbc4efe-2a61-ada3-4882-4e827039ff566de9e3df"
+description = "Your description"
+
+[settings]
+
+  [[settings.fields]]
+  type = "customer_reference"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "Your field key"

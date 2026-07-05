@@ -71,6 +71,7 @@ class ShopifyAuthController extends Controller
                 'client_id' => config('shopify.api_key'),
                 'client_secret' => $apiSecret,
                 'code' => $code,
+                'expiring' => 1, // Start requesting expiring offline tokens (using integer 1 as per Shopify spec)
             ]);
 
             if ($response->failed()) {
@@ -80,14 +81,21 @@ class ShopifyAuthController extends Controller
 
             $data = $response->json();
             $accessToken = $data['access_token'];
+            $refreshToken = $data['refresh_token'] ?? null;
+            $expiresIn = $data['expires_in'] ?? null;
+            $expiresAt = $expiresIn ? now()->addSeconds($expiresIn - 60) : null; // 60-second safety buffer
 
             // 4. Save/Update Shop in Database
             $shopifyShop = ShopifyShop::updateOrCreate(
                 ['shop_domain' => $shop],
-                ['access_token' => $accessToken]
+                [
+                    'access_token' => $accessToken,
+                    'refresh_token' => $refreshToken,
+                    'expires_at' => $expiresAt
+                ]
             );
 
-            Log::info("Shopify App successfully installed / updated for: {$shop}");
+            Log::info("Shopify App successfully installed / updated for: {$shop} (Expiring Token Enabled)");
 
             // 5. Register uninstalled webhook automatically
             $this->registerUninstallWebhook($shop, $accessToken);

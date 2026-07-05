@@ -25,6 +25,8 @@ class ShopifyShop extends Model
         'shop_domain',
         'shop_name',
         'access_token',
+        'refresh_token',
+        'expires_at',
         'active_plan',
         'selected_modules',
     ];
@@ -36,5 +38,6 @@ class ShopifyShop extends Model
      */
     protected $casts = [
         'selected_modules' => 'array',
+        'expires_at' => 'datetime',
     ];
 }

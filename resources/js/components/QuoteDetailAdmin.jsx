@@ -27,10 +27,13 @@ export default function QuoteDetailAdmin() {
   const [quote, setQuote] = useState(null);
 
   // Editable fields state
-  const [qty, setQty] = useState(100);
-  const [quotedPrice, setQuotedPrice] = useState('1.80');
+  const [items, setItems] = useState([]);
   const [applyFuture, setApplyFuture] = useState(false);
   const [expDate, setExpDate] = useState('');
+  
+  // Track original states for SaveBar
+  const [initialState, setInitialState] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     fetchQuoteDetails();
@@ -41,28 +44,114 @@ export default function QuoteDetailAdmin() {
       const res = await quoteService.getQuote(id);
       if (res && res.success && res.data) {
         setQuote(res.data);
-        setQty(res.data.quantity);
-        setQuotedPrice(res.data.quoted_price.toString());
+        const fetchedItems = res.data.items && res.data.items.length > 0 
+          ? res.data.items 
+          : [{
+              id: 'parent',
+              product_name: res.data.product_name,
+              original_price: res.data.original_price,
+              quoted_price: res.data.quoted_price,
+              quantity: res.data.quantity,
+              subtotal: res.data.subtotal,
+              image_url: res.data.image_url
+            }];
+        
+        // Save initial state deep copy
+        const clonedItems = JSON.parse(JSON.stringify(fetchedItems));
+        setItems(clonedItems);
         setApplyFuture(res.data.apply_to_future_orders);
         setExpDate(res.data.expiration_date || '');
+        
+        setInitialState({
+          items: JSON.parse(JSON.stringify(clonedItems)),
+          applyFuture: res.data.apply_to_future_orders,
+          expDate: res.data.expiration_date || ''
+        });
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      loading && setLoading(false);
     }
+  };
+
+  // Listen to dirty state and toggle SaveBar
+  useEffect(() => {
+    if (!initialState) {
+      setIsDirty(false);
+      return;
+    }
+
+    const itemsChanged = JSON.stringify(items) !== JSON.stringify(initialState.items);
+    const applyFutureChanged = applyFuture !== initialState.applyFuture;
+    const expDateChanged = expDate !== initialState.expDate;
+
+    const dirty = itemsChanged || applyFutureChanged || expDateChanged;
+    setIsDirty(dirty);
+
+    if (dirty) {
+      window.shopify && window.shopify.saveBar.show('quote-save-bar');
+    } else {
+      window.shopify && window.shopify.saveBar.hide('quote-save-bar');
+    }
+  }, [items, applyFuture, expDate, initialState]);
+
+  // Bind SaveBar actions
+  useEffect(() => {
+    const saveBar = document.getElementById('quote-save-bar');
+    if (saveBar) {
+      const onSave = () => handleUpdateQuote();
+      const onDiscard = () => handleDiscard();
+
+      saveBar.addEventListener('submit', onSave);
+      saveBar.addEventListener('discard', onDiscard);
+
+      return () => {
+        saveBar.removeEventListener('submit', onSave);
+        saveBar.removeEventListener('discard', onDiscard);
+      };
+    }
+  }, [items, applyFuture, expDate]);
+
+  const handleDiscard = () => {
+    if (initialState) {
+      setItems(JSON.parse(JSON.stringify(initialState.items)));
+      setApplyFuture(initialState.applyFuture);
+      setExpDate(initialState.expDate);
+      shopify.toast.show('Changes discarded');
+    }
+  };
+
+  const handleItemChange = (index, field, value) => {
+    const updated = [...items];
+    updated[index][field] = value;
+    if (field === 'quantity' || field === 'quoted_price') {
+      const q = parseInt(updated[index].quantity) || 0;
+      const p = parseFloat(updated[index].quoted_price) || 0;
+      updated[index].subtotal = q * p;
+    }
+    setItems(updated);
   };
 
   const handleUpdateQuote = async (statusOverride = null) => {
     setSaving(true);
     try {
       const payload = {
-        quantity: parseInt(qty) || 1,
-        quoted_price: parseFloat(quotedPrice) || 0,
-        subtotal: (parseInt(qty) || 1) * (parseFloat(quotedPrice) || 0),
         apply_to_future_orders: applyFuture ? 1 : 0,
         expiration_date: expDate || null
       };
+
+      if (items[0] && items[0].id !== 'parent') {
+        payload.items = items.map(item => ({
+          id: item.id,
+          quantity: parseInt(item.quantity) || 1,
+          quoted_price: parseFloat(item.quoted_price) || 0
+        }));
+      } else if (items[0]) {
+        payload.quantity = parseInt(items[0].quantity) || 1;
+        payload.quoted_price = parseFloat(items[0].quoted_price) || 0;
+        payload.subtotal = payload.quantity * payload.quoted_price;
+      }
 
       if (statusOverride) {
         payload.status = statusOverride;
@@ -70,7 +159,7 @@ export default function QuoteDetailAdmin() {
 
       const res = await quoteService.updateQuote(id, payload);
       if (res && res.success) {
-        shopify.toast.show('Quote updated successfully');
+        shopify.toast.show('Quote saved successfully');
         fetchQuoteDetails();
       }
     } catch (e) {
@@ -117,7 +206,7 @@ export default function QuoteDetailAdmin() {
     );
   }
 
-  const subtotalValue = (parseInt(qty) || 0) * (parseFloat(quotedPrice) || 0);
+  const subtotalValue = items.reduce((acc, item) => acc + (parseFloat(item.subtotal) || 0), 0);
   const badgeTone = quote.status === 'Approved' ? 'success' : quote.status === 'Sent' ? 'info' : 'attention';
 
   return (
@@ -131,14 +220,13 @@ export default function QuoteDetailAdmin() {
         onAction: handleSendQuote,
         loading: saving
       }}
-      secondaryActions={[
-        {
-          content: 'Save Changes',
-          onAction: () => handleUpdateQuote(),
-          loading: saving
-        }
-      ]}
     >
+      {/* Contextual Save Bar Web Component */}
+      <ui-save-bar id="quote-save-bar">
+        <button slot="discard">Discard</button>
+        <button slot="submit" variant="primary">Save</button>
+      </ui-save-bar>
+
       <Layout>
         {/* Left Column (2/3 width) */}
         <Layout.Section>
@@ -147,12 +235,12 @@ export default function QuoteDetailAdmin() {
             {/* Products Table Card */}
             <Card padding="400">
               <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Product</Text>
+                <Text variant="headingMd" as="h2">Products</Text>
                 
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e1e3e5' }}>
-                      <th style={{ padding: '8px 0', fontSize: '12px', color: '#6d7175', textTransform: 'uppercase' }}>Variants</th>
+                      <th style={{ padding: '8px 0', fontSize: '12px', color: '#6d7175', textTransform: 'uppercase' }}>Variant</th>
                       <th style={{ padding: '8px 0', fontSize: '12px', color: '#6d7175', textTransform: 'uppercase', width: '100px' }}>Quantity</th>
                       <th style={{ padding: '8px 0', fontSize: '12px', color: '#6d7175', textTransform: 'uppercase', width: '180px' }}>Quote Price</th>
                       <th style={{ padding: '8px 0', fontSize: '12px', color: '#6d7175', textTransform: 'uppercase', textAlign: 'right' }}>Subtotal</th>
@@ -160,52 +248,52 @@ export default function QuoteDetailAdmin() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td style={{ padding: '16px 0', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <img 
-                          src="https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png" 
-                          alt="Bamboo cutlery set" 
-                          style={{ width: '52px', height: '52px', borderRadius: '4px', border: '1px solid #e1e3e5', objectFit: 'cover' }}
-                        />
-                        <div>
-                          <Text variant="bodyMd" fontWeight="semibold">{quote.product_name}</Text>
-                          <Text variant="bodySm" tone="subdued">Default Title</Text>
-                          <Text variant="bodySm" tone="subdued">SKU: BCS-CC-4P</Text>
-                          <Text variant="bodySm" tone="subdued">Available stock: 9650</Text>
-                        </div>
-                      </td>
-                      
-                      <td style={{ padding: '16px 0' }}>
-                        <TextField
-                          type="number"
-                          value={qty.toString()}
-                          onChange={(val) => setQty(parseInt(val) || 0)}
-                          autoComplete="off"
-                          labelHidden
-                          label="Quantity"
-                        />
-                      </td>
-                      
-                      <td style={{ padding: '16px 0' }}>
-                        <TextField
-                          type="number"
-                          value={quotedPrice}
-                          onChange={(val) => setQuotedPrice(val)}
-                          suffix="USD"
-                          autoComplete="off"
-                          labelHidden
-                          label="Quote Price"
-                        />
-                      </td>
-                      
-                      <td style={{ padding: '16px 0', textAlign: 'right', fontWeight: 'semibold' }}>
-                        ${subtotalValue.toFixed(2)} USD
-                      </td>
+                    {items.map((item, idx) => (
+                      <tr key={item.id || idx} style={{ borderBottom: '1px solid #f1f2f3' }}>
+                        <td style={{ padding: '16px 0', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <img 
+                            src={item.image_url || "https://cdn.shopify.com/s/images/themes/product-images/product-1_small.png"} 
+                            alt={item.product_name} 
+                            style={{ width: '52px', height: '52px', borderRadius: '4px', border: '1px solid #e1e3e5', objectFit: 'cover' }}
+                          />
+                          <div>
+                            <Text variant="bodyMd" fontWeight="semibold">{item.product_name}</Text>
+                            <Text variant="bodySm" tone="subdued">Original: ${parseFloat(item.original_price).toFixed(2)}</Text>
+                          </div>
+                        </td>
+                        
+                        <td style={{ padding: '16px 0' }}>
+                          <TextField
+                            type="number"
+                            value={item.quantity.toString()}
+                            onChange={(val) => handleItemChange(idx, 'quantity', parseInt(val) || 0)}
+                            autoComplete="off"
+                            labelHidden
+                            label="Quantity"
+                          />
+                        </td>
+                        
+                        <td style={{ padding: '16px 0' }}>
+                          <TextField
+                            type="number"
+                            value={item.quoted_price.toString()}
+                            onChange={(val) => handleItemChange(idx, 'quoted_price', val)}
+                            suffix="USD"
+                            autoComplete="off"
+                            labelHidden
+                            label="Quote Price"
+                          />
+                        </td>
+                        
+                        <td style={{ padding: '16px 0', textAlign: 'right', fontWeight: 'semibold' }}>
+                          ${(parseFloat(item.subtotal) || 0).toFixed(2)} USD
+                        </td>
 
-                      <td style={{ padding: '16px 0', textAlign: 'center' }}>
-                        <Button variant="plain" tone="critical">🗑️</Button>
-                      </td>
-                    </tr>
+                        <td style={{ padding: '16px 0', textAlign: 'center' }}>
+                          <Button variant="plain" tone="critical">🗑️</Button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </BlockStack>

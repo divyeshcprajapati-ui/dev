@@ -220,7 +220,7 @@ export default function CustomerDetail() {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderBottom: '1px solid #f1f2f3', paddingBottom: '8px' }}>
                        <Text variant="bodyMd" tone="subdued">VAT/Tax id</Text>
-                       <Text variant="bodyMd" alignment="end">{customer.vat_id || '-'}</Text>
+                       <Text variant="bodyMd" alignment="end">{customer.tax_id || customer.vat_id || '-'}</Text>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingBottom: '8px' }}>
                        <Text variant="bodyMd" tone="subdued">Terms checkbox</Text>

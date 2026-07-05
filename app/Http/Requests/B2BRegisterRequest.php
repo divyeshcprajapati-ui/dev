@@ -25,13 +25,24 @@ class B2BRegisterRequest extends FormRequest
      */
     public function rules()
     {
+        $country = $this->input('country');
+        $taxIdRule = 'nullable|string|max:100';
+
+        if (strtolower($country) === 'india' || $this->input('country_code') === 'IN') {
+            // Apply GSTIN validation for India
+            $taxIdRule = [
+                'required',
+                'regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i'
+            ];
+        }
+
         return [
             'firstName'       => 'required|string|max:100',
             'lastName'        => 'required|string|max:100',
             'email'           => 'required|email|max:255',
             'companyName'     => 'required|string|max:255',
             'website'         => 'nullable|url|max:255',
-            'taxId'           => 'nullable|string|max:100',
+            'taxId'           => $taxIdRule,
             'phone'           => 'nullable|string|max:50',
             'address'         => 'required|string|max:255',
             'city'            => 'required|string|max:100',
@@ -40,6 +51,18 @@ class B2BRegisterRequest extends FormRequest
             'businessDocument'=> 'nullable|file|mimes:pdf,png,jpeg,jpg|max:10240', // 10MB limit
             'notes'           => 'nullable|string|max:1000',
             'metafields'      => 'nullable',
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @return array
+     */
+    public function messages()
+    {
+        return [
+            'taxId.regex' => 'The Tax ID / VAT Number must be a valid GSTIN format (e.g. 22AAAAA0000A1Z5).',
         ];
     }
 

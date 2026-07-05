@@ -1,0 +1,362 @@
+<div class="b2b-cart-quote-wrapper" style="margin: 20px 0; text-align: right;">
+  <button type="button" id="b2b-cart-quote-btn" class="button button--secondary" style="
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    {% unless request.design_mode %}display: none;{% endunless %}
+    background-color: {{ block.settings.btn_bg_color }};
+    color: {{ block.settings.btn_text_color }};
+    border: 1px solid {{ block.settings.btn_border_color }};
+  ">
+    {{ block.settings.btn_label }}
+  </button>
+</div>
+
+<!-- Cart Quotation Request Modal -->
+<div id="b2b-cart-quote-modal" class="b2b-modal-overlay" style="display: none;">
+  <div class="b2b-modal-content">
+    <form id="b2b-cart-quote-form" style="display: flex; flex-direction: column; height: 100%; max-height: 90vh;">
+      <div class="b2b-modal-header">
+        <h3>Request a Quote for Cart</h3>
+        <button type="button" class="b2b-modal-close">&times;</button>
+      </div>
+      
+      <input type="hidden" name="shop_domain" value="{{ shop.permanent_domain }}">
+
+      <div id="b2b-cart-quote-success-banner" style="display: none; padding: 16px; background-color: #dcfce7; color: #166534; border-radius: 8px; margin: 24px; font-weight: 600; text-align: center;">
+        Cart quote request submitted successfully!
+      </div>
+
+      <div class="b2b-modal-body" style="overflow-y: auto; flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <div class="b2b-cart-items-list" style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 8px;">
+          {% for item in cart.items %}
+            <div class="b2b-cart-item-row" data-title="{{ item.product.title }} - {{ item.variant.title }}" data-original-price="{{ item.price | money_without_currency }}" data-qty="{{ item.quantity }}" data-image="{{ item.image | image_url: width: 120 }}" style="display: flex; gap: 16px; align-items: center; background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <img src="{{ item.image | image_url: width: 80 }}" alt="{{ item.product.title }}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
+              <div style="flex: 1; text-align: left;">
+                <strong style="font-size: 14px;">{{ item.product.title }}</strong>
+                {% unless item.variant.title contains 'Default' %}
+                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">{{ item.variant.title }}</p>
+                {% endunless %}
+                <p style="margin: 4px 0 0 0; font-size: 13px; color: #475569;">Original: {{ item.price | money }} | Qty: {{ item.quantity }}</p>
+              </div>
+              <div style="width: 120px;">
+                <label style="font-size: 11px; font-weight: 600; color: #4b5563; display: block; margin-bottom: 4px; text-align: left;">Target Unit Price</label>
+                <input type="number" class="b2b-target-unit-price" step="0.01" value="{{ item.price | money_without_currency }}" required style="padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box;">
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-name">Your Name *</label>
+          <input type="text" id="b2b-cart-quote-name" name="customer_name" value="{{ customer.name }}" required>
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-email">Your Email *</label>
+          <input type="email" id="b2b-cart-quote-email" name="customer_email" value="{{ customer.email }}" required>
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-company">Company Name *</label>
+          <input type="text" id="b2b-cart-quote-company" name="company_name" value="{{ customer.default_address.company }}" required>
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-location">Company Location / Address *</label>
+          <input type="text" id="b2b-cart-quote-location" name="company_location" required>
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-shipping">Shipping Address *</label>
+          <textarea id="b2b-cart-quote-shipping" name="shipping_address" rows="2" required></textarea>
+        </div>
+
+        <div class="b2b-form-field">
+          <label for="b2b-cart-quote-billing">Billing Address</label>
+          <textarea id="b2b-cart-quote-billing" name="billing_address" rows="2" placeholder="Same as shipping address if left empty"></textarea>
+        </div>
+      </div>
+
+      <div class="b2b-modal-footer">
+        <button type="button" class="btn-cancel b2b-modal-close-btn">Cancel</button>
+        <button type="submit" class="btn-submit">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .b2b-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .b2b-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 540px;
+    max-height: 90vh;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    color: #333;
+    overflow: hidden;
+  }
+  .b2b-modal-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .b2b-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .b2b-modal-close {
+    border: none;
+    background: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+  }
+  .b2b-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .b2b-form-field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    text-align: left;
+  }
+  .b2b-form-field input, .b2b-form-field textarea {
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .b2b-modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-shrink: 0;
+    background: #fafafa;
+  }
+  .b2b-modal-footer button {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-cancel {
+    background: #f3f4f6;
+    color: #4b5563;
+  }
+  .btn-submit {
+    background: #1a1a1a;
+    color: #fff;
+  }
+</style>
+
+<script>
+  (function() {
+    const API_BASE_URL = 'https://onshore-embezzle-skinny.ngrok-free.dev';
+    const shopDomain = '{{ shop.permanent_domain }}';
+    const customerEmail = '{{ customer.email }}';
+    const cartItemCount = {{ cart.item_count | default: 0 }};
+
+    // Safe dynamic address loading
+    const address1 = `{{ customer.default_address.address1 }}`;
+    const city = `{{ customer.default_address.city }}`;
+    const province = `{{ customer.default_address.province }}`;
+    const zip = `{{ customer.default_address.zip }}`;
+    const country = `{{ customer.default_address.country }}`;
+
+    const cleanAddressParts = [address1, city, province, zip, country].map(s => s.trim()).filter(Boolean);
+    const cleanAddress = cleanAddressParts.join(', ');
+
+    function populateDefaultAddress() {
+      const locEl = document.getElementById('b2b-cart-quote-location');
+      const shipEl = document.getElementById('b2b-cart-quote-shipping');
+      if (locEl && cleanAddress) {
+        locEl.value = cleanAddress;
+      }
+      if (shipEl && cleanAddress) {
+        shipEl.value = cleanAddress;
+      }
+    }
+
+    async function initCartQuoteButton() {
+      const btn = document.getElementById('b2b-cart-quote-btn');
+      const modal = document.getElementById('b2b-cart-quote-modal');
+      const closeBtns = document.querySelectorAll('#b2b-cart-quote-modal .b2b-modal-close, #b2b-cart-quote-modal .b2b-modal-close-btn');
+      const form = document.getElementById('b2b-cart-quote-form');
+
+      if (!btn || !modal) return;
+      if (cartItemCount === 0) return;
+
+      console.log('B2B Cart Quote Block loaded. Items:', cartItemCount);
+
+      // Force display in Shopify design mode (Theme Editor)
+      const isDesignMode = {% if request.design_mode %}true{% else %}false{% endif %};
+      if (isDesignMode) {
+        btn.style.display = 'inline-block';
+      }
+
+      // Check settings and eligibility
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/b2b/quote-settings?shop=${shopDomain}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        const result = await res.json();
+
+        if (result.success && result.data) {
+          const settings = result.data;
+          const isCartPageEnabled = settings.cartPage === 'true' || settings.cartPage === true;
+          const notLoggedInAllowed = settings.notLoggedIn === 'true' || settings.notLoggedIn === true;
+
+          if (isCartPageEnabled) {
+            if (customerEmail || notLoggedInAllowed) {
+              btn.style.display = 'inline-block';
+            } else {
+              if (!isDesignMode) btn.style.display = 'none';
+            }
+          } else {
+            if (!isDesignMode) btn.style.display = 'none';
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load cart quote settings:', e);
+      }
+
+      // Show Modal
+      btn.addEventListener('click', function() {
+        modal.style.display = 'flex';
+        populateDefaultAddress();
+      });
+
+      // Hide Modal
+      closeBtns.forEach(c => {
+        c.addEventListener('click', function() {
+          modal.style.display = 'none';
+        });
+      });
+
+      // Submit Form
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const submitBtn = form.querySelector('.btn-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+
+        const formData = new FormData(form);
+        const payload = {};
+        formData.forEach((val, key) => {
+          payload[key] = val;
+        });
+
+        // Collect items
+        const items = [];
+        const itemRows = document.querySelectorAll('.b2b-cart-item-row');
+        itemRows.forEach(row => {
+          const productName = row.getAttribute('data-title');
+          const originalPrice = parseFloat(row.getAttribute('data-original-price'));
+          const quantity = parseInt(row.getAttribute('data-qty'));
+          const imageUrl = row.getAttribute('data-image') || '';
+          const targetPriceInput = row.querySelector('.b2b-target-unit-price');
+          const quotedPrice = parseFloat(targetPriceInput.value) || originalPrice;
+
+          items.push({
+            product_name: productName,
+            original_price: originalPrice,
+            quoted_price: quotedPrice,
+            quantity: quantity,
+            image_url: imageUrl
+          });
+        });
+
+        payload.items = items;
+        if (!payload.billing_address) {
+          payload.billing_address = payload.shipping_address;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/b2b/quotes`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            const successBanner = document.getElementById('b2b-cart-quote-success-banner');
+            if (successBanner) {
+              successBanner.style.display = 'block';
+              form.querySelector('.b2b-modal-body').style.display = 'none';
+              form.querySelector('.b2b-modal-footer').style.display = 'none';
+              setTimeout(() => {
+                modal.style.display = 'none';
+                successBanner.style.display = 'none';
+                form.querySelector('.b2b-modal-body').style.display = 'flex';
+                form.querySelector('.b2b-modal-footer').style.display = 'flex';
+                form.reset();
+              }, 3000);
+            }
+          } else {
+            alert('Failed to submit cart quote: ' + (data.message || 'Unknown error'));
+          }
+        } catch (err) {
+          console.error(err);
+          alert('An error occurred submitting the cart quote.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Request';
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCartQuoteButton);
+    } else {
+      initCartQuoteButton();
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Cart Page Quote Button",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "btn_label", "label": "Button Label", "default": "Request a Quote for Cart" },
+    { "type": "color", "id": "btn_bg_color", "label": "Button Background Color", "default": "#1a1a1a" },
+    { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" },
+    { "type": "color", "id": "btn_border_color", "label": "Button Border Color", "default": "#1a1a1a" }
+  ]
+}
+{% endschema %}

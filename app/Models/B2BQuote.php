@@ -28,6 +28,7 @@ class B2BQuote extends Model
         'company_location',
         'shipping_address',
         'billing_address',
+        'image_url',
     ];
 
     protected $casts = [
@@ -37,4 +38,9 @@ class B2BQuote extends Model
         'apply_to_future_orders' => 'boolean',
         'expiration_date' => 'date:Y-m-d',
     ];
+
+    public function items()
+    {
+        return $this->hasMany(B2BQuoteItem::class, 'b2b_quote_id');
+    }
 }

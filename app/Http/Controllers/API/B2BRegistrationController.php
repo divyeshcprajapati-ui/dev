@@ -151,6 +151,13 @@ class B2BRegistrationController extends Controller
 
             Log::info('New B2B registration application saved', ['application_id' => $application->id]);
 
+            // Trigger Shopify Flow Trigger event
+            try {
+                $this->triggerFlowRegistrationSubmitted($application, $shopDomain);
+            } catch (Exception $flowEx) {
+                Log::error('Shopify Flow trigger execution failed: ' . $flowEx->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Your B2B application has been submitted successfully and is under review.',
@@ -431,13 +438,17 @@ class B2BRegistrationController extends Controller
         ]);
 
         try {
+            $postData = [
+                'query' => $query,
+            ];
+            if (!empty($variables)) {
+                $postData['variables'] = $variables;
+            }
+
             $response = \Illuminate\Support\Facades\Http::withHeaders([
                 'X-Shopify-Access-Token' => $accessToken,
                 'Content-Type' => 'application/json',
-            ])->post($url, [
-                'query' => $query,
-                'variables' => $variables,
-            ]);
+            ])->post($url, $postData);
 
             if ($response->failed()) {
                 Log::error('Shopify GraphQL API request failed', [
@@ -919,6 +930,139 @@ class B2BRegistrationController extends Controller
         }
 
         $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
-        return $shop ? $shop->access_token : config('shopify.access_token');
+        if (!$shop) {
+            return config('shopify.access_token');
+        }
+
+        // Check if token has expired or is about to expire (within 5 minutes)
+        if ($shop->refresh_token && $shop->expires_at && $shop->expires_at->isPast()) {
+            Log::info("Shopify access token expired for {$shopDomain}, attempting refresh.");
+            $this->refreshShopifyAccessToken($shop);
+        }
+
+        return $shop->access_token;
+    }
+
+    /**
+     * Refresh the Shopify access token using the refresh token.
+     */
+    private function refreshShopifyAccessToken(\App\Models\ShopifyShop $shop): void
+    {
+        $tokenUrl = "https://{$shop->shop_domain}/admin/oauth/access_token";
+        
+        try {
+            $response = \Illuminate\Support\Facades\Http::post($tokenUrl, [
+                'client_id' => config('shopify.api_key'),
+                'client_secret' => config('shopify.api_secret'),
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $shop->refresh_token,
+            ]);
+
+            if ($response->failed()) {
+                Log::error("Failed to refresh Shopify access token for {$shop->shop_domain}: " . $response->body());
+                return;
+            }
+
+            $data = $response->json();
+            $accessToken = $data['access_token'];
+            $refreshToken = $data['refresh_token'] ?? $shop->refresh_token;
+            $expiresIn = $data['expires_in'] ?? null;
+            $expiresAt = $expiresIn ? now()->addSeconds($expiresIn - 60) : null;
+
+            $shop->update([
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshToken,
+                'expires_at' => $expiresAt
+            ]);
+
+            Log::info("Successfully refreshed Shopify access token for {$shop->shop_domain}");
+        } catch (\Exception $e) {
+            Log::error("Exception refreshing Shopify access token for {$shop->shop_domain}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Trigger Shopify Flow event for B2B Registration Form Submitted
+     */
+    private function triggerFlowRegistrationSubmitted($application, string $shopDomain): void
+    {
+        $mutation = '
+        mutation flowTriggerReceive($handle: String!, $payload: JSON!) {
+          flowTriggerReceive(handle: $handle, payload: $payload) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }';
+
+        $customerId = $application->shopify_customer_id;
+        if (!$customerId) {
+            // Find any approved customer ID locally first
+            $existing = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
+                ->whereNotNull('shopify_customer_id')
+                ->where('shopify_customer_id', '!=', '')
+                ->first();
+            if ($existing) {
+                $customerId = $existing->shopify_customer_id;
+            } else {
+                // Fallback to query Shopify for first customer GID
+                $customerId = $this->getFirstShopifyCustomerId($shopDomain);
+            }
+        }
+
+        // If no customer GID exists yet on the store, use a dummy format to pass schema type validation
+        if (!$customerId) {
+            $customerId = "gid://shopify/Customer/1";
+        }
+
+        $payload = [
+            'Your field key' => 'New B2B registration submitted by: ' . $application->first_name . ' ' . $application->last_name . ' (' . $application->company_name . ')',
+            'customer_id' => $customerId
+        ];
+
+        Log::info("Triggering Shopify Flow for b2b-registration-form-submitted", [
+            'shop' => $shopDomain,
+            'payload' => $payload
+        ]);
+
+        $res = $this->queryShopifyGraphQL($mutation, [
+            'handle' => 'b2b-registration-form-submitted',
+            'payload' => $payload
+        ], $shopDomain);
+
+        if (!$res['success']) {
+            Log::error("Failed to trigger Shopify Flow b2b-registration-form-submitted: " . json_encode($res['errors'] ?? $res['error'] ?? 'Unknown error'));
+        } else {
+            $errors = $res['data']['flowTriggerReceive']['userErrors'] ?? [];
+            if (!empty($errors)) {
+                Log::error("Shopify Flow b2b-registration-form-submitted returned userErrors: " . json_encode($errors));
+            } else {
+                Log::info("Successfully triggered Shopify Flow b2b-registration-form-submitted");
+            }
+        }
+    }
+
+    /**
+     * Helper to retrieve first customer GID from Shopify to use as a fallback placeholder.
+     */
+    private function getFirstShopifyCustomerId(string $shopDomain): ?string
+    {
+        $query = '
+        query {
+          customers(first: 1) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+        }';
+
+        $res = $this->queryShopifyGraphQL($query, [], $shopDomain);
+        if ($res['success']) {
+            return $res['data']['customers']['edges'][0]['node']['id'] ?? null;
+        }
+        return null;
     }
 }

@@ -21,7 +21,7 @@ class B2BQuoteController extends Controller
             $email = $request->query('email');
             $shop = $request->query('shop');
             
-            $query = B2BQuote::orderBy('created_at', 'desc');
+            $query = B2BQuote::with('items')->orderBy('created_at', 'desc');
 
             if ($status && $status !== 'all') {
                 $query->where('status', ucfirst($status));
@@ -54,7 +54,7 @@ class B2BQuoteController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $quote = B2BQuote::findOrFail($id);
+            $quote = B2BQuote::with('items')->findOrFail($id);
             return response()->json([
                 'success' => true,
                 'data' => $quote
@@ -76,11 +76,11 @@ class B2BQuoteController extends Controller
         try {
             $validated = $request->validate([
                 'shop_domain' => 'nullable|string',
-                'product_name' => 'required|string',
-                'original_price' => 'required|numeric',
-                'quoted_price' => 'required|numeric',
-                'quantity' => 'required|integer|min:1',
-                'subtotal' => 'required|numeric',
+                'product_name' => 'required_without:items|string',
+                'original_price' => 'required_without:items|numeric',
+                'quoted_price' => 'required_without:items|numeric',
+                'quantity' => 'required_without:items|integer|min:1',
+                'subtotal' => 'required_without:items|numeric',
                 'customer_name' => 'required|string',
                 'customer_email' => 'required|email',
                 'company_name' => 'required|string',
@@ -88,21 +88,97 @@ class B2BQuoteController extends Controller
                 'shipping_address' => 'required|string',
                 'billing_address' => 'nullable|string',
                 'expiration_date' => 'nullable|date',
+                'image_url' => 'nullable|string',
+                
+                // Multi-item quotes support
+                'items' => 'nullable|array',
+                'items.*.product_name' => 'required_with:items|string',
+                'items.*.original_price' => 'required_with:items|numeric',
+                'items.*.quoted_price' => 'required_with:items|numeric',
+                'items.*.quantity' => 'required_with:items|integer|min:1',
+                'items.*.image_url' => 'nullable|string',
             ]);
 
-            // Generate unique quote number: e.g. Quote #93
-            $nextId = (B2BQuote::max('id') ?? 0) + 1;
-            $validated['quote_number'] = '#' . $nextId;
-            $validated['status'] = 'Pending';
+            // Calculate overall subtotal and prepare items data
+            $subtotal = 0;
+            $itemsData = [];
 
-            $quote = B2BQuote::create($validated);
+            if ($request->has('items') && is_array($request->input('items'))) {
+                foreach ($request->input('items') as $item) {
+                    $itemSubtotal = $item['quoted_price'] * $item['quantity'];
+                    $subtotal += $itemSubtotal;
+                    $itemsData[] = [
+                        'product_name' => $item['product_name'],
+                        'original_price' => $item['original_price'],
+                        'quoted_price' => $item['quoted_price'],
+                        'quantity' => $item['quantity'],
+                        'subtotal' => $itemSubtotal,
+                        'image_url' => $item['image_url'] ?? null
+                    ];
+                }
+            } else {
+                $subtotal = $validated['subtotal'];
+                $itemsData[] = [
+                    'product_name' => $validated['product_name'],
+                    'original_price' => $validated['original_price'],
+                    'quoted_price' => $validated['quoted_price'],
+                    'quantity' => $validated['quantity'],
+                    'subtotal' => $validated['subtotal'],
+                    'image_url' => $validated['image_url'] ?? null
+                ];
+            }
+
+            // Create parent B2B Quote
+            $nextId = (B2BQuote::max('id') ?? 0) + 1;
+            
+            // Format parent fields for backwards compatibility with single product UI
+            $firstItem = $itemsData[0];
+            $prodSummary = count($itemsData) === 1 
+                ? $firstItem['product_name'] 
+                : $firstItem['product_name'] . ' (+ ' . (count($itemsData) - 1) . ' items)';
+
+            $quoteData = [
+                'shop_domain' => $validated['shop_domain'] ?? null,
+                'quote_number' => '#' . $nextId,
+                'status' => 'Pending',
+                'product_name' => $prodSummary,
+                'original_price' => count($itemsData) === 1 ? $firstItem['original_price'] : 0,
+                'quoted_price' => count($itemsData) === 1 ? $firstItem['quoted_price'] : 0,
+                'quantity' => count($itemsData) === 1 ? $firstItem['quantity'] : count($itemsData),
+                'subtotal' => $subtotal,
+                'customer_name' => $validated['customer_name'],
+                'customer_email' => $validated['customer_email'],
+                'company_name' => $validated['company_name'],
+                'company_location' => $validated['company_location'],
+                'shipping_address' => $validated['shipping_address'],
+                'billing_address' => $validated['billing_address'] ?? null,
+                'expiration_date' => $validated['expiration_date'] ?? null,
+                'image_url' => $firstItem['image_url'] ?? null,
+            ];
+
+            $quote = B2BQuote::create($quoteData);
+
+            // Save relationship items
+            foreach ($itemsData as $item) {
+                $quote->items()->create($item);
+            }
 
             Log::info('New B2B quote submitted', ['quote_id' => $quote->id]);
+
+            // Trigger Shopify Flow Trigger event
+            try {
+                $shopDomain = $validated['shop_domain'] ?? null;
+                if ($shopDomain) {
+                    $this->triggerFlowQuoteSubmitted($quote, $shopDomain);
+                }
+            } catch (Exception $flowEx) {
+                Log::error('Shopify Flow quote trigger execution failed: ' . $flowEx->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Quote request submitted successfully.',
-                'data' => $quote
+                'data' => $quote->load('items')
             ], 200);
         } catch (Exception $e) {
             Log::error('Error creating quote: ' . $e->getMessage());
@@ -128,10 +204,47 @@ class B2BQuoteController extends Controller
                 'apply_to_future_orders' => 'nullable|boolean',
                 'expiration_date' => 'nullable|date_format:Y-m-d',
                 'status' => 'nullable|string',
+                
+                // Multi-item updates support
+                'items' => 'nullable|array',
+                'items.*.id' => 'required_with:items',
+                'items.*.quoted_price' => 'required_with:items|numeric',
+                'items.*.quantity' => 'required_with:items|integer|min:1',
             ]);
 
             $oldStatus = $quote->status;
-            $quote->update($validated);
+            
+            // If items are provided, update each child item and recalculate totals
+            if ($request->has('items') && is_array($request->input('items'))) {
+                $totalQty = 0;
+                $totalSubtotal = 0;
+                
+                foreach ($request->input('items') as $itemData) {
+                    $item = \App\Models\B2BQuoteItem::find($itemData['id']);
+                    if ($item && $item->b2b_quote_id == $quote->id) {
+                        $itemSubtotal = $itemData['quoted_price'] * $itemData['quantity'];
+                        $item->update([
+                            'quoted_price' => $itemData['quoted_price'],
+                            'quantity' => $itemData['quantity'],
+                            'subtotal' => $itemSubtotal
+                        ]);
+                        $totalQty += $itemData['quantity'];
+                        $totalSubtotal += $itemSubtotal;
+                    }
+                }
+                
+                // Update parent fields with new sums
+                $quote->update([
+                    'quantity' => $totalQty,
+                    'subtotal' => $totalSubtotal,
+                    'apply_to_future_orders' => $validated['apply_to_future_orders'] ?? $quote->apply_to_future_orders,
+                    'expiration_date' => $validated['expiration_date'] ?? $quote->expiration_date,
+                    'status' => $validated['status'] ?? $quote->status
+                ]);
+            } else {
+                // Backward compatibility for single product quotes
+                $quote->update($validated);
+            }
 
             Log::info("B2B Quote Updated: ID {$id}");
 
@@ -142,13 +255,13 @@ class B2BQuoteController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Quote updated successfully.',
-                'data' => $quote
+                'data' => $quote->load('items')
             ]);
         } catch (Exception $e) {
             Log::error("Error updating quote ID {$id}: " . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update quote.'
+                'message' => 'Failed to update quote. ' . $e->getMessage()
             ], 500);
         }
     }
@@ -245,14 +358,27 @@ class B2BQuoteController extends Controller
             }
         }
 
-        // 2. Build line items using custom item inputs to avoid variant ID mismatch issues
-        $lineItems = [
-            [
+        // 2. Build line items
+        $lineItems = [];
+        if (!$quote->relationLoaded('items')) {
+            $quote->load('items');
+        }
+
+        foreach ($quote->items as $item) {
+            $lineItems[] = [
+                'title' => $item->product_name,
+                'originalUnitPrice' => (string)$item->quoted_price,
+                'quantity' => (int)$item->quantity
+            ];
+        }
+
+        if (empty($lineItems)) {
+            $lineItems[] = [
                 'title' => $quote->product_name,
                 'originalUnitPrice' => (string)$quote->quoted_price,
                 'quantity' => (int)$quote->quantity
-            ]
-        ];
+            ];
+        }
 
         // 3. Draft Order Input
         $input = [
@@ -319,13 +445,17 @@ class B2BQuoteController extends Controller
         $url = "https://{$shopDomain}/admin/api/{$apiVersion}/graphql.json";
 
         try {
+            $postData = [
+                'query' => $query,
+            ];
+            if (!empty($variables)) {
+                $postData['variables'] = $variables;
+            }
+
             $response = \Illuminate\Support\Facades\Http::withHeaders([
                 'X-Shopify-Access-Token' => $accessToken,
                 'Content-Type' => 'application/json',
-            ])->post($url, [
-                'query' => $query,
-                'variables' => $variables,
-            ]);
+            ])->post($url, $postData);
 
             if ($response->failed()) {
                 return ['success' => false, 'error' => 'API Request Failed: ' . $response->body()];
@@ -352,6 +482,136 @@ class B2BQuoteController extends Controller
         }
 
         $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
-        return $shop ? $shop->access_token : config('shopify.access_token');
+        if (!$shop) {
+            return config('shopify.access_token');
+        }
+
+        // Check if token has expired or is about to expire (within 5 minutes)
+        if ($shop->refresh_token && $shop->expires_at && $shop->expires_at->isPast()) {
+            Log::info("Shopify access token expired for {$shopDomain}, attempting refresh.");
+            $this->refreshShopifyAccessToken($shop);
+        }
+
+        return $shop->access_token;
+    }
+
+    /**
+     * Refresh the Shopify access token using the refresh token.
+     */
+    private function refreshShopifyAccessToken(\App\Models\ShopifyShop $shop): void
+    {
+        $tokenUrl = "https://{$shop->shop_domain}/admin/oauth/access_token";
+        
+        try {
+            $response = \Illuminate\Support\Facades\Http::post($tokenUrl, [
+                'client_id' => config('shopify.api_key'),
+                'client_secret' => config('shopify.api_secret'),
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $shop->refresh_token,
+            ]);
+
+            if ($response->failed()) {
+                Log::error("Failed to refresh Shopify access token for {$shop->shop_domain}: " . $response->body());
+                return;
+            }
+
+            $data = $response->json();
+            $accessToken = $data['access_token'];
+            $refreshToken = $data['refresh_token'] ?? $shop->refresh_token;
+            $expiresIn = $data['expires_in'] ?? null;
+            $expiresAt = $expiresIn ? now()->addSeconds($expiresIn - 60) : null;
+
+            $shop->update([
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshToken,
+                'expires_at' => $expiresAt
+            ]);
+
+            Log::info("Successfully refreshed Shopify access token for {$shop->shop_domain}");
+        } catch (\Exception $e) {
+            Log::error("Exception refreshing Shopify access token for {$shop->shop_domain}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Trigger Shopify Flow event for B2b Quote Form Submited
+     */
+    private function triggerFlowQuoteSubmitted($quote, string $shopDomain): void
+    {
+        $mutation = '
+        mutation flowTriggerReceive($handle: String!, $payload: JSON!) {
+          flowTriggerReceive(handle: $handle, payload: $payload) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }';
+
+        // Attempt to find any approved customer ID locally or query Shopify for fallback
+        $customerId = null;
+        $existing = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
+            ->whereNotNull('shopify_customer_id')
+            ->where('shopify_customer_id', '!=', '')
+            ->first();
+        if ($existing) {
+            $customerId = $existing->shopify_customer_id;
+        } else {
+            $customerId = $this->getFirstShopifyCustomerId($shopDomain);
+        }
+
+        // If no customer GID exists yet on the store, use a dummy format to pass schema type validation
+        if (!$customerId) {
+            $customerId = "gid://shopify/Customer/1";
+        }
+
+        $payload = [
+            'Your field key' => 'New B2B Quote submitted by: ' . $quote->customer_name . ' (' . $quote->company_name . ') - Total: $' . number_format($quote->subtotal, 2),
+            'customer_id' => $customerId
+        ];
+
+        Log::info("Triggering Shopify Flow for b2b-quote-form-submited", [
+            'shop' => $shopDomain,
+            'payload' => $payload
+        ]);
+
+        $res = $this->queryShopifyGraphQL($mutation, [
+            'handle' => 'b2b-quote-form-submited',
+            'payload' => $payload
+        ], $shopDomain);
+
+        if (!$res['success']) {
+            Log::error("Failed to trigger Shopify Flow b2b-quote-form-submited: " . json_encode($res['errors'] ?? $res['error'] ?? 'Unknown error'));
+        } else {
+            $errors = $res['data']['flowTriggerReceive']['userErrors'] ?? [];
+            if (!empty($errors)) {
+                Log::error("Shopify Flow b2b-quote-form-submited returned userErrors: " . json_encode($errors));
+            } else {
+                Log::info("Successfully triggered Shopify Flow b2b-quote-form-submited");
+            }
+        }
+    }
+
+    /**
+     * Helper to retrieve first customer GID from Shopify to use as a fallback placeholder.
+     */
+    private function getFirstShopifyCustomerId(string $shopDomain): ?string
+    {
+        $query = '
+        query {
+          customers(first: 1) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+        }';
+
+        $res = $this->queryShopifyGraphQL($query, [], $shopDomain);
+        if ($res['success']) {
+            return $res['data']['customers']['edges'][0]['node']['id'] ?? null;
+        }
+        return null;
     }
 }

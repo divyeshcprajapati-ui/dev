@@ -1,0 +1,15 @@
+[[extensions]]
+name = "B2B Registration Form Submitted"
+handle = "b2b-registration-form-submitted"
+type = "flow_trigger"
+uid = "3c5cc6be-d368-9576-ec0f-30ea86f808791b6b1575"
+description = "Your description"
+
+[settings]
+
+  [[settings.fields]]
+  type = "customer_reference"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "Your field key"

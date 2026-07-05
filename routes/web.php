@@ -22,8 +22,12 @@ use Illuminate\Http\Request;
 Route::get('/auth/shopify', [ShopifyAuthController::class, 'install'])->name('shopify.auth.install');
 Route::get('/auth/shopify/callback', [ShopifyAuthController::class, 'callback'])->name('shopify.auth.callback');
 
+use App\Http\Controllers\ShopifyWebhookController;
+
 // Shopify Webhooks
 Route::post('/webhooks/shopify/app-uninstalled', [ShopifyAuthController::class, 'webhookUninstalled'])->name('shopify.webhook.uninstalled');
+Route::post('/webhooks/shopify/company-created', [ShopifyWebhookController::class, 'handleCompanyCreated'])->name('shopify.webhook.company_created');
+Route::post('/webhooks/shopify/quote-updated', [ShopifyWebhookController::class, 'handleQuoteUpdated'])->name('shopify.webhook.quote_updated');
 
 // Intercept root page load to verify shop installation
 Route::get('/', function (Request $request) {

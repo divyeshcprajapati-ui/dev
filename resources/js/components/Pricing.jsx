@@ -63,6 +63,10 @@ export default function Pricing() {
             });
 
             if (res && res.success) {
+                if (res.requires_billing && res.confirmationUrl) {
+                    window.top.location.replace(res.confirmationUrl);
+                    return;
+                }
                 setActivePlan(planName);
                 if (typeof shopify !== 'undefined' && shopify.toast) {
                     shopify.toast.show(`Successfully updated to ${planName.charAt(0).toUpperCase() + planName.slice(1)} plan`);

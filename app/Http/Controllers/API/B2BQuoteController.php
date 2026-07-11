@@ -8,9 +8,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use App\Traits\HasShopifyApi;
 
 class B2BQuoteController extends Controller
 {
+    use HasShopifyApi;
     /**
      * Get all quotes.
      */
@@ -426,112 +428,9 @@ class B2BQuoteController extends Controller
         }
     }
 
-    /**
-     * Helper to make GraphQL requests to Shopify Admin API
-     */
-    private function queryShopifyGraphQL(string $query, array $variables = [], ?string $shopDomain = null): array
-    {
-        $accessToken = $this->getAccessToken($shopDomain);
-        $apiVersion = config('shopify.api_version', '2026-04');
 
-        if (!$shopDomain || !$accessToken) {
-            Log::warning('Shopify shop domain or access token not configured. Skipping live API call.', [
-                'shopDomain' => $shopDomain,
-                'hasToken' => !empty($accessToken)
-            ]);
-            return ['success' => false, 'error' => 'Shopify API credentials not configured.'];
-        }
 
-        $url = "https://{$shopDomain}/admin/api/{$apiVersion}/graphql.json";
 
-        try {
-            $postData = [
-                'query' => $query,
-            ];
-            if (!empty($variables)) {
-                $postData['variables'] = $variables;
-            }
-
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'X-Shopify-Access-Token' => $accessToken,
-                'Content-Type' => 'application/json',
-            ])->post($url, $postData);
-
-            if ($response->failed()) {
-                return ['success' => false, 'error' => 'API Request Failed: ' . $response->body()];
-            }
-
-            $data = $response->json();
-            if (isset($data['errors'])) {
-                return ['success' => false, 'errors' => $data['errors']];
-            }
-
-            return ['success' => true, 'data' => $data['data']];
-        } catch (Exception $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
-        }
-    }
-
-    /**
-     * Get the active access token for the given shop domain.
-     */
-    private function getAccessToken(?string $shopDomain): ?string
-    {
-        if (!$shopDomain) {
-            return config('shopify.access_token');
-        }
-
-        $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
-        if (!$shop) {
-            return config('shopify.access_token');
-        }
-
-        // Check if token has expired or is about to expire (within 5 minutes)
-        if ($shop->refresh_token && $shop->expires_at && $shop->expires_at->isPast()) {
-            Log::info("Shopify access token expired for {$shopDomain}, attempting refresh.");
-            $this->refreshShopifyAccessToken($shop);
-        }
-
-        return $shop->access_token;
-    }
-
-    /**
-     * Refresh the Shopify access token using the refresh token.
-     */
-    private function refreshShopifyAccessToken(\App\Models\ShopifyShop $shop): void
-    {
-        $tokenUrl = "https://{$shop->shop_domain}/admin/oauth/access_token";
-        
-        try {
-            $response = \Illuminate\Support\Facades\Http::post($tokenUrl, [
-                'client_id' => config('shopify.api_key'),
-                'client_secret' => config('shopify.api_secret'),
-                'grant_type' => 'refresh_token',
-                'refresh_token' => $shop->refresh_token,
-            ]);
-
-            if ($response->failed()) {
-                Log::error("Failed to refresh Shopify access token for {$shop->shop_domain}: " . $response->body());
-                return;
-            }
-
-            $data = $response->json();
-            $accessToken = $data['access_token'];
-            $refreshToken = $data['refresh_token'] ?? $shop->refresh_token;
-            $expiresIn = $data['expires_in'] ?? null;
-            $expiresAt = $expiresIn ? now()->addSeconds($expiresIn - 60) : null;
-
-            $shop->update([
-                'access_token' => $accessToken,
-                'refresh_token' => $refreshToken,
-                'expires_at' => $expiresAt
-            ]);
-
-            Log::info("Successfully refreshed Shopify access token for {$shop->shop_domain}");
-        } catch (\Exception $e) {
-            Log::error("Exception refreshing Shopify access token for {$shop->shop_domain}: " . $e->getMessage());
-        }
-    }
 
     /**
      * Trigger Shopify Flow event for B2b Quote Form Submited
@@ -548,26 +447,53 @@ class B2BQuoteController extends Controller
           }
         }';
 
-        // Attempt to find any approved customer ID locally or query Shopify for fallback
         $customerId = null;
-        $existing = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
-            ->whereNotNull('shopify_customer_id')
-            ->where('shopify_customer_id', '!=', '')
-            ->first();
-        if ($existing) {
-            $customerId = $existing->shopify_customer_id;
-        } else {
+
+        // 1. First, check if the request explicitly passed a shopify_customer_id GID
+        if (request()->has('shopify_customer_id') && !empty(request()->input('shopify_customer_id'))) {
+            $customerId = request()->input('shopify_customer_id');
+        }
+
+        // 2. Next, check if there is a local B2B application with this email to get the customer GID
+        if (!$customerId && !empty($quote->customer_email)) {
+            $application = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
+                ->where('email', $quote->customer_email)
+                ->whereNotNull('shopify_customer_id')
+                ->where('shopify_customer_id', '!=', '')
+                ->first();
+            if ($application) {
+                $customerId = $application->shopify_customer_id;
+            }
+        }
+
+        // 3. Next, try to search for the customer dynamically on Shopify by email
+        if (!$customerId && !empty($quote->customer_email)) {
+            $customerId = $this->getShopifyCustomerIdByEmail($quote->customer_email, $shopDomain);
+        }
+
+        // 4. Fallback: Query Shopify for first customer GID
+        if (!$customerId) {
             $customerId = $this->getFirstShopifyCustomerId($shopDomain);
         }
 
-        // If no customer GID exists yet on the store, use a dummy format to pass schema type validation
+        // 5. Fallback: Find any approved customer ID locally
+        if (!$customerId) {
+            $existing = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
+                ->whereNotNull('shopify_customer_id')
+                ->where('shopify_customer_id', '!=', '')
+                ->first();
+            if ($existing) {
+                $customerId = $existing->shopify_customer_id;
+            }
+        }
+
+        // 6. Fallback: Use dummy GID
         if (!$customerId) {
             $customerId = "gid://shopify/Customer/1";
         }
 
         $payload = [
-            'Your field key' => 'New B2B Quote submitted by: ' . $quote->customer_name . ' (' . $quote->company_name . ') - Total: $' . number_format($quote->subtotal, 2),
-            'customer_id' => $customerId
+            'Your field key' => 'New B2B Quote submitted by: ' . $quote->customer_name . ' (' . $quote->company_name . ') - Total: $' . number_format($quote->subtotal, 2)
         ];
 
         Log::info("Triggering Shopify Flow for b2b-quote-form-submited", [
@@ -592,26 +518,5 @@ class B2BQuoteController extends Controller
         }
     }
 
-    /**
-     * Helper to retrieve first customer GID from Shopify to use as a fallback placeholder.
-     */
-    private function getFirstShopifyCustomerId(string $shopDomain): ?string
-    {
-        $query = '
-        query {
-          customers(first: 1) {
-            edges {
-              node {
-                id
-              }
-            }
-          }
-        }';
 
-        $res = $this->queryShopifyGraphQL($query, [], $shopDomain);
-        if ($res['success']) {
-            return $res['data']['customers']['edges'][0]['node']['id'] ?? null;
-        }
-        return null;
-    }
 }

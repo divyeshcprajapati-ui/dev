@@ -51,6 +51,7 @@ class B2BRegisterRequest extends FormRequest
             'businessDocument'=> 'nullable|file|mimes:pdf,png,jpeg,jpg|max:10240', // 10MB limit
             'notes'           => 'nullable|string|max:1000',
             'metafields'      => 'nullable',
+            'shopify_customer_id' => 'nullable|string',
         ];
     }
 

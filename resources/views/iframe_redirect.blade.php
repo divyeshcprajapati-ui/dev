@@ -97,10 +97,15 @@
         }
 
         // Escape the iframe context for OAuth redirect
+        const redirectUrl = "{{ $redirectUrl }}";
         if (window.top !== window.self) {
-            window.open("{{ $redirectUrl }}", "_top");
+            try {
+                window.top.location.replace(redirectUrl);
+            } catch (e) {
+                window.top.location.href = redirectUrl;
+            }
         } else {
-            window.location.href = "{{ $redirectUrl }}";
+            window.location.replace(redirectUrl);
         }
     </script>
 </head>

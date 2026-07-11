@@ -42,6 +42,9 @@ export default function B2BRegistrationForm({ onBack }) {
     const [formDesc, setFormDesc] = useState('Submit your information and we will get back to you as soon as possible.');
     const [submitBtnLabel, setSubmitBtnLabel] = useState('Submit');
 
+    const [originalSteps, setOriginalSteps] = useState(null);
+    const [isDirty, setIsDirty] = useState(false);
+
     // Tree/Steps Config
     const [steps, setSteps] = useState(() => {
         const saved = localStorage.getItem('b2b_form_steps_v2');
@@ -91,10 +94,71 @@ export default function B2BRegistrationForm({ onBack }) {
             .then(res => {
                 if (res && res.success && res.data) {
                     setSteps(res.data);
+                    setOriginalSteps(JSON.stringify(res.data));
+                } else {
+                    setOriginalSteps(JSON.stringify(steps));
                 }
             })
             .catch(err => console.error("Failed to load registration form config from DB", err));
     }, []);
+
+    useEffect(() => {
+        if (originalSteps) {
+            setIsDirty(JSON.stringify(steps) !== originalSteps);
+        }
+    }, [steps, originalSteps]);
+
+    // Show/hide save bar depending on dirty state
+    useEffect(() => {
+        if (isDirty) {
+            window.shopify && window.shopify.saveBar.show('b2b-form-save-bar');
+        } else {
+            window.shopify && window.shopify.saveBar.hide('b2b-form-save-bar');
+        }
+    }, [isDirty]);
+
+    const handleSave = async () => {
+        try {
+            await registrationService.saveFormConfig(steps);
+            setOriginalSteps(JSON.stringify(steps));
+            setIsDirty(false);
+            if (typeof shopify !== 'undefined' && shopify.toast) {
+                shopify.toast.show("Form configuration saved successfully!");
+            } else {
+                alert("Form configuration saved successfully!");
+            }
+        } catch (e) {
+            if (typeof shopify !== 'undefined' && shopify.toast) {
+                shopify.toast.show("Failed to save configuration", { isError: true });
+            } else {
+                alert("Failed to save configuration: " + (e.message || e));
+            }
+        }
+    };
+
+    const handleDiscard = () => {
+        if (originalSteps) {
+            setSteps(JSON.parse(originalSteps));
+            setIsDirty(false);
+            if (typeof shopify !== 'undefined' && shopify.toast) {
+                shopify.toast.show("Changes discarded");
+            }
+        }
+    };
+
+    useEffect(() => {
+        const saveBar = document.getElementById('b2b-form-save-bar');
+        if (saveBar) {
+            saveBar.addEventListener('submit', handleSave);
+            saveBar.addEventListener('discard', handleDiscard);
+        }
+        return () => {
+            if (saveBar) {
+                saveBar.removeEventListener('submit', handleSave);
+                saveBar.removeEventListener('discard', handleDiscard);
+            }
+        };
+    }, [steps, originalSteps]);
 
     useEffect(() => {
         localStorage.setItem('b2b_form_steps_v2', JSON.stringify(steps));
@@ -737,6 +801,11 @@ export default function B2BRegistrationForm({ onBack }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f1f2f4', overflow: 'hidden' }}>
+            {/* Contextual Save Bar Web Component */}
+            <ui-save-bar id="b2b-form-save-bar">
+                <button slot="discard">Discard</button>
+                <button slot="submit" variant="primary">Save</button>
+            </ui-save-bar>
             {/* Form Top Header Bar */}
             <div style={{
                 height: '56px',
@@ -839,29 +908,7 @@ export default function B2BRegistrationForm({ onBack }) {
                             fontSize: '13px'
                         }}
                     >
-                        Discard
-                    </button>
-                    <button 
-                        onClick={async () => {
-                            try {
-                                await registrationService.saveFormConfig(steps);
-                                alert("Form changes saved successfully to database!");
-                            } catch (e) {
-                                alert("Failed to save configuration: " + (e.message || e));
-                            }
-                        }}
-                        style={{
-                            padding: '8px 16px',
-                            border: 'none',
-                            borderRadius: '6px',
-                            backgroundColor: '#1a1a1a',
-                            color: 'white',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            fontSize: '13px'
-                        }}
-                    >
-                        Save
+                        Back
                     </button>
                 </InlineStack>
             </div>

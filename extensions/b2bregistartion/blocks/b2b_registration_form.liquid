@@ -7,6 +7,9 @@
 
     <form id="b2b-registration-form" enctype="multipart/form-data" novalidate>
       <input type="hidden" id="shopify-shop-domain" value="{{ shop.permanent_domain }}">
+      {% if customer %}
+        <input type="hidden" id="shopify-customer-id" value="gid://shopify/Customer/{{ customer.id }}">
+      {% endif %}
       <div id="general-error" class="b2b-error-banner hidden"></div>
       <div id="general-success" class="b2b-success-banner hidden"></div>
 

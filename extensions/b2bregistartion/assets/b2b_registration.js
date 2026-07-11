@@ -118,8 +118,26 @@
         async function buildForm() {
             try {
                 container.innerHTML = '<div style="text-align:center;padding:20px;color:#6b7280;">Loading...</div>';
-                const res = await fetch(`${URL}/api/b2b/form-config?shop=${shopDomain}`, { headers: getHeaders() });
-                const result = await res.json();
+                
+                const cacheKey = `b2b_form_config_${shopDomain}`;
+                const cached = sessionStorage.getItem(cacheKey);
+                let result;
+                
+                if (cached) {
+                    try {
+                        result = JSON.parse(cached);
+                    } catch (e) {
+                        console.error('Failed to parse cached form config', e);
+                    }
+                }
+                
+                if (!result) {
+                    const res = await fetch(`${URL}/api/b2b/form-config?shop=${shopDomain}`, { headers: getHeaders() });
+                    result = await res.json();
+                    if (result && result.success) {
+                        sessionStorage.setItem(cacheKey, JSON.stringify(result));
+                    }
+                }
                 
                 if (result.success && Array.isArray(result.data) && result.data.length > 0) {
                     steps = result.data;
@@ -336,6 +354,10 @@
             
             const formData = new FormData();
             if (shopDomain) formData.append('shop', shopDomain);
+            const customerIdEl = document.getElementById('shopify-customer-id');
+            if (customerIdEl && customerIdEl.value) {
+                formData.append('shopify_customer_id', customerIdEl.value);
+            }
             
             const standardFields = ['firstName', 'lastName', 'email', 'companyName', 'address', 'country', 'state', 'city', 'zip', 'taxId', 'phone', 'notes'];
             standardFields.forEach(key => {

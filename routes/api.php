@@ -52,9 +52,9 @@ Route::post('/b2b/form-config/update', [B2BRegistrationController::class, 'updat
 // B2B quotes CRUD routes
 Route::get('/b2b/quotes', [B2BQuoteController::class, 'index']);
 Route::get('/b2b/quotes/{id}', [B2BQuoteController::class, 'show']);
-Route::post('/b2b/quotes', [B2BQuoteController::class, 'store']);
+Route::post('/b2b/quotes', [B2BQuoteController::class, 'store'])->middleware('check.b2b.subscription:quote');
 Route::post('/b2b/quotes/{id}/update', [B2BQuoteController::class, 'update']);
-Route::post('/b2b/quotes/{id}/send', [B2BQuoteController::class, 'send']);
+Route::post('/b2b/quotes/{id}/send', [B2BQuoteController::class, 'send'])->middleware('check.b2b.subscription:quote');
 
 // Location fetching routes for registration form
 Route::get('/b2b/locations/countries', [LocationController::class, 'getCountries']);

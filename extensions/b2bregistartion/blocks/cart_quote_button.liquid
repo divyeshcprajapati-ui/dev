@@ -24,6 +24,9 @@
       </div>
       
       <input type="hidden" name="shop_domain" value="{{ shop.permanent_domain }}">
+      {% if customer %}
+        <input type="hidden" name="shopify_customer_id" value="gid://shopify/Customer/{{ customer.id }}">
+      {% endif %}
 
       <div id="b2b-cart-quote-success-banner" style="display: none; padding: 16px; background-color: #dcfce7; color: #166534; border-radius: 8px; margin: 24px; font-weight: 600; text-align: center;">
         Cart quote request submitted successfully!

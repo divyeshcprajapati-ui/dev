@@ -12,9 +12,11 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\B2BNotificationSetting;
 use Exception;
 use Illuminate\Http\Request;
+use App\Traits\HasShopifyApi;
 
 class B2BRegistrationController extends Controller
 {
+    use HasShopifyApi;
     /**
      * Fetch all B2B registration application requests.
      *
@@ -147,6 +149,7 @@ class B2BRegistrationController extends Controller
                 'notes' => $validatedData['notes'] ?? null,
                 'status' => 'Pending',
                 'metafields' => $metafields,
+                'shopify_customer_id' => $request->input('shopify_customer_id'),
             ]);
 
             Log::info('New B2B registration application saved', ['application_id' => $application->id]);
@@ -182,12 +185,6 @@ class B2BRegistrationController extends Controller
         }
     }
 
-    /**
-     * Approve a B2B application.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
-     */
     /**
      * Approve a B2B application.
      *
@@ -294,6 +291,9 @@ class B2BRegistrationController extends Controller
                     edges {
                       node {
                         id
+                        customer {
+                          id
+                        }
                       }
                     }
                   }
@@ -413,63 +413,7 @@ class B2BRegistrationController extends Controller
         }
     }
 
-    /**
-     * Helper to make GraphQL requests to Shopify Admin API
-     */
-    private function queryShopifyGraphQL(string $query, array $variables = [], ?string $shopDomain = null): array
-    {
-        $accessToken = $this->getAccessToken($shopDomain);
-        $apiVersion = config('shopify.api_version', '2026-04');
 
-        if (!$shopDomain || !$accessToken) {
-            Log::warning('Shopify shop domain or access token not configured. Skipping live API call.', [
-                'shopDomain' => $shopDomain,
-                'hasToken' => !empty($accessToken)
-            ]);
-            return ['success' => false, 'error' => 'Shopify API credentials not configured.'];
-        }
-
-        $url = "https://{$shopDomain}/admin/api/{$apiVersion}/graphql.json";
-
-        Log::debug('Shopify GraphQL Query Details:', [
-            'shopDomain' => $shopDomain,
-            'accessToken' => substr($accessToken, 0, 12) . '...',
-            'apiVersion' => $apiVersion
-        ]);
-
-        try {
-            $postData = [
-                'query' => $query,
-            ];
-            if (!empty($variables)) {
-                $postData['variables'] = $variables;
-            }
-
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'X-Shopify-Access-Token' => $accessToken,
-                'Content-Type' => 'application/json',
-            ])->post($url, $postData);
-
-            if ($response->failed()) {
-                Log::error('Shopify GraphQL API request failed', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-                return ['success' => false, 'error' => 'API Request Failed: ' . $response->body()];
-            }
-
-            $data = $response->json();
-            if (isset($data['errors'])) {
-                Log::error('Shopify GraphQL API returned errors', ['errors' => $data['errors']]);
-                return ['success' => false, 'errors' => $data['errors']];
-            }
-
-            return ['success' => true, 'data' => $data['data']];
-        } catch (Exception $e) {
-            Log::error('Shopify GraphQL API communication error: ' . $e->getMessage());
-            return ['success' => false, 'error' => $e->getMessage()];
-        }
-    }
 
     /**
      * Assign Location Admin role to the B2B contact
@@ -717,12 +661,82 @@ class B2BRegistrationController extends Controller
                 ], 404);
             }
 
-            $shop->active_plan = $request->input('active_plan', 'free');
-            $shop->selected_modules = $request->input('selected_modules', []);
+            $activePlan = $request->input('active_plan', 'free');
+            $modules = $request->input('selected_modules', []);
+
+            // Calculate total price based on selected modules
+            $totalPrice = \App\Models\B2BSubscription::whereIn('subscription_key', $modules)->sum('price');
+
+            if ($totalPrice > 0) {
+                $mutation = '
+                mutation appSubscriptionCreate($name: String!, $returnUrl: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+                  appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
+                    appSubscription {
+                      id
+                    }
+                    confirmationUrl
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }';
+
+                $returnUrl = route('shopify.billing.callback', [
+                    'shop' => $shopDomain,
+                    'plan' => $activePlan,
+                    'modules' => implode(',', $modules)
+                ]);
+
+                $variables = [
+                    'name' => ucfirst($activePlan) . ' Subscription (' . count($modules) . ' modules)',
+                    'returnUrl' => $returnUrl,
+                    'test' => true, // Sandbox test mode enabled
+                    'lineItems' => [
+                        [
+                            'plan' => [
+                                'appRecurringPricingDetails' => [
+                                    'price' => [
+                                        'amount' => (float)$totalPrice,
+                                        'currencyCode' => 'USD'
+                                    ],
+                                    'interval' => 'EVERY_30_DAYS'
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+
+                $res = $this->queryShopifyGraphQL($mutation, $variables, $shopDomain);
+                if ($res['success']) {
+                    $errors = $res['data']['appSubscriptionCreate']['userErrors'] ?? [];
+                    if (empty($errors)) {
+                        $confirmationUrl = $res['data']['appSubscriptionCreate']['confirmationUrl'];
+                        return response()->json([
+                            'success' => true,
+                            'requires_billing' => true,
+                            'confirmationUrl' => $confirmationUrl
+                        ]);
+                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Shopify Billing error: ' . $errors[0]['message']
+                    ], 400);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to initiate Shopify Billing charge.'
+                ], 500);
+            }
+
+            // Free plan saving directly
+            $shop->active_plan = $activePlan;
+            $shop->selected_modules = $modules;
             $shop->save();
 
             return response()->json([
                 'success' => true,
+                'requires_billing' => false,
                 'message' => 'Shop plan and modules updated successfully.',
                 'data' => [
                     'active_plan' => $shop->active_plan,
@@ -920,66 +934,7 @@ class B2BRegistrationController extends Controller
         return $shop;
     }
 
-    /**
-     * Get the active access token for the given shop domain.
-     */
-    private function getAccessToken(?string $shopDomain): ?string
-    {
-        if (!$shopDomain) {
-            return config('shopify.access_token');
-        }
 
-        $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
-        if (!$shop) {
-            return config('shopify.access_token');
-        }
-
-        // Check if token has expired or is about to expire (within 5 minutes)
-        if ($shop->refresh_token && $shop->expires_at && $shop->expires_at->isPast()) {
-            Log::info("Shopify access token expired for {$shopDomain}, attempting refresh.");
-            $this->refreshShopifyAccessToken($shop);
-        }
-
-        return $shop->access_token;
-    }
-
-    /**
-     * Refresh the Shopify access token using the refresh token.
-     */
-    private function refreshShopifyAccessToken(\App\Models\ShopifyShop $shop): void
-    {
-        $tokenUrl = "https://{$shop->shop_domain}/admin/oauth/access_token";
-        
-        try {
-            $response = \Illuminate\Support\Facades\Http::post($tokenUrl, [
-                'client_id' => config('shopify.api_key'),
-                'client_secret' => config('shopify.api_secret'),
-                'grant_type' => 'refresh_token',
-                'refresh_token' => $shop->refresh_token,
-            ]);
-
-            if ($response->failed()) {
-                Log::error("Failed to refresh Shopify access token for {$shop->shop_domain}: " . $response->body());
-                return;
-            }
-
-            $data = $response->json();
-            $accessToken = $data['access_token'];
-            $refreshToken = $data['refresh_token'] ?? $shop->refresh_token;
-            $expiresIn = $data['expires_in'] ?? null;
-            $expiresAt = $expiresIn ? now()->addSeconds($expiresIn - 60) : null;
-
-            $shop->update([
-                'access_token' => $accessToken,
-                'refresh_token' => $refreshToken,
-                'expires_at' => $expiresAt
-            ]);
-
-            Log::info("Successfully refreshed Shopify access token for {$shop->shop_domain}");
-        } catch (\Exception $e) {
-            Log::error("Exception refreshing Shopify access token for {$shop->shop_domain}: " . $e->getMessage());
-        }
-    }
 
     /**
      * Trigger Shopify Flow event for B2B Registration Form Submitted
@@ -997,28 +952,45 @@ class B2BRegistrationController extends Controller
         }';
 
         $customerId = $application->shopify_customer_id;
+        
+        // 1. Try to search for existing Shopify Customer GID by registration email
+        if (!$customerId && !empty($application->email)) {
+            $customerId = $this->getShopifyCustomerIdByEmail($application->email, $shopDomain);
+        }
+
+        // 2. Fallback: Query Shopify for first customer GID
         if (!$customerId) {
-            // Find any approved customer ID locally first
+            $customerId = $this->getFirstShopifyCustomerId($shopDomain);
+        }
+
+        // 3. Fallback: Search for any approved registration locally
+        if (!$customerId) {
             $existing = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
                 ->whereNotNull('shopify_customer_id')
                 ->where('shopify_customer_id', '!=', '')
                 ->first();
             if ($existing) {
                 $customerId = $existing->shopify_customer_id;
-            } else {
-                // Fallback to query Shopify for first customer GID
-                $customerId = $this->getFirstShopifyCustomerId($shopDomain);
             }
         }
 
-        // If no customer GID exists yet on the store, use a dummy format to pass schema type validation
+        // 4. Fallback: Use dummy GID
         if (!$customerId) {
             $customerId = "gid://shopify/Customer/1";
         }
 
+        $numericId = null;
+        if ($customerId && $customerId !== "gid://shopify/Customer/1") {
+            if (preg_match('/\/([0-9]+)$/', $customerId, $matches)) {
+                $numericId = (int)$matches[1];
+            } else if (is_numeric($customerId)) {
+                $numericId = (int)$customerId;
+            }
+        }
+
         $payload = [
             'Your field key' => 'New B2B registration submitted by: ' . $application->first_name . ' ' . $application->last_name . ' (' . $application->company_name . ')',
-            'customer_id' => $customerId
+            'customer_id' => $numericId
         ];
 
         Log::info("Triggering Shopify Flow for b2b-registration-form-submitted", [
@@ -1043,26 +1015,5 @@ class B2BRegistrationController extends Controller
         }
     }
 
-    /**
-     * Helper to retrieve first customer GID from Shopify to use as a fallback placeholder.
-     */
-    private function getFirstShopifyCustomerId(string $shopDomain): ?string
-    {
-        $query = '
-        query {
-          customers(first: 1) {
-            edges {
-              node {
-                id
-              }
-            }
-          }
-        }';
 
-        $res = $this->queryShopifyGraphQL($query, [], $shopDomain);
-        if ($res['success']) {
-            return $res['data']['customers']['edges'][0]['node']['id'] ?? null;
-        }
-        return null;
-    }
 }

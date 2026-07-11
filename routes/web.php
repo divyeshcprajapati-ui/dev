@@ -23,6 +23,10 @@ Route::get('/auth/shopify', [ShopifyAuthController::class, 'install'])->name('sh
 Route::get('/auth/shopify/callback', [ShopifyAuthController::class, 'callback'])->name('shopify.auth.callback');
 
 use App\Http\Controllers\ShopifyWebhookController;
+use App\Http\Controllers\ShopifyBillingController;
+
+// Shopify Billing Redirect
+Route::get('/billing/shopify/callback', [ShopifyBillingController::class, 'billingCallback'])->name('shopify.billing.callback');
 
 // Shopify Webhooks
 Route::post('/webhooks/shopify/app-uninstalled', [ShopifyAuthController::class, 'webhookUninstalled'])->name('shopify.webhook.uninstalled');

@@ -12,4 +12,20 @@ description = "Your description"
 
   [[settings.fields]]
   type = "single_line_text_field"
+  key = "customer name"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "company name"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "email"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
+  key = "application link"
+
+  [[settings.fields]]
+  type = "single_line_text_field"
   key = "Your field key"

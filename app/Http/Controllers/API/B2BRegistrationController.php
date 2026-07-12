@@ -988,8 +988,15 @@ class B2BRegistrationController extends Controller
             }
         }
 
+        $shopName = explode('.', $shopDomain)[0];
+        $appLink = "https://admin.shopify.com/store/{$shopName}/apps/b2bdev/customers/{$application->id}";
+
         $payload = [
             'Your field key' => 'New B2B registration submitted by: ' . $application->first_name . ' ' . $application->last_name . ' (' . $application->company_name . ')',
+            'customer name' => $application->first_name . ' ' . $application->last_name,
+            'company name' => $application->company_name,
+            'email' => $application->email,
+            'application link' => $appLink,
             'customer_id' => $numericId
         ];
 

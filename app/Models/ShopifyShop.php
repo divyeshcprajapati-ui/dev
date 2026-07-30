@@ -32,6 +32,16 @@ class ShopifyShop extends Model
     ];
 
     /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array
+     */
+    protected $hidden = [
+        'access_token',
+        'refresh_token',
+    ];
+
+    /**
      * The attributes that should be cast.
      *
      * @var array

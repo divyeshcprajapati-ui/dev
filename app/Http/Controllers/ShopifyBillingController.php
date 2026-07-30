@@ -80,6 +80,6 @@ class ShopifyBillingController extends Controller
         $statusParam = $isActivated ? 'success' : 'failed';
         $redirectUrl = "https://{$shopDomain}/admin/apps/{$apiKey}?billing_status={$statusParam}";
 
-        return view('iframe_redirect', ['redirectUrl' => $redirectUrl]);
+        return redirect($redirectUrl);
     }
 }

@@ -11,6 +11,54 @@ import {
 } from '@shopify/polaris';
 import { registrationService } from '../services/registrationService';
 
+function PricingSkeleton() {
+    return (
+        <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '24px',
+            padding: '0 24px',
+            justifyContent: 'center'
+        }}>
+            {[1, 2, 3].map((i) => (
+                <div key={i} style={{ flex: '1 1 270px', maxWidth: '320px' }}>
+                    <div style={{
+                        backgroundColor: 'white',
+                        borderRadius: '16px',
+                        border: '1px solid #e1e3e5',
+                        padding: '32px 24px',
+                        height: '420px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxSizing: 'border-box'
+                    }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="skeleton-pulse" style={{ width: '60%', height: '24px', backgroundColor: '#e2e8f0', borderRadius: '4px' }} />
+                            <div className="skeleton-pulse" style={{ width: '40%', height: '36px', backgroundColor: '#e2e8f0', borderRadius: '4px' }} />
+                            <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '8px 0' }} />
+                            <div className="skeleton-pulse" style={{ width: '90%', height: '16px', backgroundColor: '#e2e8f0', borderRadius: '4px' }} />
+                            <div className="skeleton-pulse" style={{ width: '80%', height: '16px', backgroundColor: '#e2e8f0', borderRadius: '4px' }} />
+                            <div className="skeleton-pulse" style={{ width: '70%', height: '16px', backgroundColor: '#e2e8f0', borderRadius: '4px' }} />
+                        </div>
+                        <div className="skeleton-pulse" style={{ width: '100%', height: '40px', backgroundColor: '#e2e8f0', borderRadius: '8px', marginTop: 'auto' }} />
+                    </div>
+                </div>
+            ))}
+            <style>{`
+                .skeleton-pulse {
+                    animation: skeleton-pulse 1.5s ease-in-out infinite;
+                }
+                @keyframes skeleton-pulse {
+                    0% { opacity: 0.6; }
+                    50% { opacity: 1; }
+                    100% { opacity: 0.6; }
+                }
+            `}</style>
+        </div>
+    );
+}
+
 export default function Pricing() {
     const [billingCycle, setBillingCycle] = useState('monthly');
     const [modules, setModules] = useState([]);
@@ -129,25 +177,35 @@ export default function Pricing() {
 
     if (loading) {
         return (
-            <Page title="Pricing">
-                <Box padding="1000" style={{ textAlign: 'center' }}>
-                    <div className="pricing-loader" style={{
-                        width: '40px',
-                        height: '40px',
-                        border: '3px solid rgba(0, 128, 96, 0.15)',
-                        borderTop: '3px solid #008060',
-                        borderRadius: '50%',
-                        margin: '100px auto 20px',
-                        animation: 'spin-pricing 0.8s linear infinite'
-                    }} />
-                    <Text variant="headingMd">Loading pricing plans...</Text>
-                    <style>{`
-                        @keyframes spin-pricing {
-                            0% { transform: rotate(0deg); }
-                            100% { transform: rotate(360deg); }
-                        }
-                    `}</style>
-                </Box>
+            <Page>
+                {/* Fonts & Styling Injector */}
+                <style>{`
+                    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+                    
+                    .pricing-container {
+                        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+                        background-color: #f6f8fa;
+                        padding: 24px 0 40px;
+                        border-radius: 12px;
+                    }
+                `}</style>
+
+                <div className="pricing-container">
+                    <BlockStack gap="600">
+                        {/* Header title */}
+                        <Box padding="300" style={{ textAlign: 'center' }}>
+                            <Text variant="headingXl" as="h1" fontWeight="bold">Sleek Pricing Estimates</Text>
+                            <div style={{ marginTop: '8px' }}>
+                                <Text variant="bodyMd" tone="subdued">
+                                    Choose modules to build your tailored wholesale workflow with transparent rates.
+                                </Text>
+                            </div>
+                        </Box>
+
+                        {/* Skeleton Grid */}
+                        <PricingSkeleton />
+                    </BlockStack>
+                </div>
             </Page>
         );
     }
@@ -275,6 +333,11 @@ export default function Pricing() {
                             <Text variant="bodyMd" tone="subdued">
                                 Choose modules to build your tailored wholesale workflow with transparent rates.
                             </Text>
+                        </div>
+                        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                            <Badge tone="success" size="large">
+                                Current Active Plan: {activePlan === 'free' ? 'Free' : activePlan === 'grow' ? 'Grow' : activePlan === 'advanced' ? 'Advanced' : 'Shopify Plus'}
+                            </Badge>
                         </div>
                     </Box>
 

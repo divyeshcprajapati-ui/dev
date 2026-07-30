@@ -11,9 +11,12 @@ class QuoteSettingsController extends Controller
     /**
      * Get all quote settings
      */
-    public function getSettings()
+    public function getSettings(Request $request)
     {
-        $settings = B2BQuoteSetting::all()->pluck('setting_value', 'setting_key');
+        $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+        
+        $settings = B2BQuoteSetting::where('shop_domain', $shop)
+            ->pluck('setting_value', 'setting_key');
         
         return response()->json([
             'success' => true,
@@ -26,6 +29,7 @@ class QuoteSettingsController extends Controller
      */
     public function updateSettings(Request $request)
     {
+        $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
         $settings = $request->input('settings', []);
 
         foreach ($settings as $key => $value) {
@@ -37,7 +41,10 @@ class QuoteSettingsController extends Controller
             }
 
             B2BQuoteSetting::updateOrCreate(
-                ['setting_key' => $key],
+                [
+                    'shop_domain' => $shop,
+                    'setting_key' => $key
+                ],
                 ['setting_value' => $dbValue]
             );
         }

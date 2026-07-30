@@ -35,13 +35,6 @@ Route::post('/webhooks/shopify/quote-updated', [ShopifyWebhookController::class,
 
 // Intercept root page load to verify shop installation
 Route::get('/', function (Request $request) {
-    $shop = $request->query('shop');
-    if ($shop) {
-        $shopRecord = ShopifyShop::where('shop_domain', $shop)->first();
-        if (!$shopRecord) {
-            return redirect()->route('shopify.auth.install', ['shop' => $shop]);
-        }
-    }
     return view('app');
 });
 

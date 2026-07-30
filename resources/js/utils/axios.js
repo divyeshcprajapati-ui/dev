@@ -11,9 +11,9 @@ const apiClient = axios.create({
     withCredentials: true // Required to allow cookies (like XSRF-TOKEN) to be sent automatically
 });
 
-// Request Interceptor: Attach CSRF Token and Shop Domain if available
+// Request Interceptor: Attach CSRF Token, Shop Domain, and Shopify Session Token if available
 apiClient.interceptors.request.use(
-    (config) => {
+    async (config) => {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         if (csrfToken) {
             config.headers['X-CSRF-TOKEN'] = csrfToken;
@@ -30,6 +30,18 @@ apiClient.interceptors.request.use(
 
         if (shop) {
             config.headers['X-Shop-Domain'] = shop;
+        }
+
+        // Fetch Shopify Session Token (ID Token) if shopify API is loaded in App Bridge
+        if (typeof window !== 'undefined' && window.shopify && typeof window.shopify.idToken === 'function') {
+            try {
+                const token = await window.shopify.idToken();
+                if (token) {
+                    config.headers['Authorization'] = `Bearer ${token}`;
+                }
+            } catch (e) {
+                console.error('[Axios Interceptor] Failed to retrieve Shopify ID Token:', e);
+            }
         }
 
         return config;

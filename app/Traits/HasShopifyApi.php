@@ -127,6 +127,68 @@ trait HasShopifyApi
     }
 
     /**
+     * Exchange a Shopify Session Token (ID Token) for an Access Token.
+     */
+    protected function exchangeSessionTokenForAccessToken(string $shopDomain, string $sessionToken): ?array
+    {
+        $tokenUrl = "https://{$shopDomain}/admin/oauth/access_token";
+
+        try {
+            $response = Http::post($tokenUrl, [
+                'client_id' => config('shopify.api_key'),
+                'client_secret' => config('shopify.api_secret'),
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:token-exchange',
+                'subject_token' => $sessionToken,
+                'subject_token_type' => 'urn:ietf:params:oauth:token-type:id_token',
+                'requested_token_type' => 'urn:shopify:params:oauth:token-type:offline-access-token',
+                'expiring' => 1,
+            ]);
+
+            if ($response->failed()) {
+                Log::error("Shopify token exchange failed for {$shopDomain}: " . $response->body());
+                return null;
+            }
+
+            return $response->json();
+        } catch (Exception $e) {
+            Log::error("Exception exchanging Shopify session token for {$shopDomain}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Register app/uninstalled webhook dynamically for the shop.
+     */
+    protected function registerUninstallWebhook(string $shop, string $accessToken): void
+    {
+        $apiVersion = config('shopify.api_version', '2026-04');
+        $webhookUrl = "https://{$shop}/admin/api/{$apiVersion}/webhooks.json";
+        $callbackUrl = route('shopify.webhook.uninstalled');
+
+        try {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $accessToken,
+                'Content-Type' => 'application/json',
+            ])->post($webhookUrl, [
+                'webhook' => [
+                    'topic' => 'app/uninstalled',
+                    'address' => $callbackUrl,
+                    'format' => 'json'
+                ]
+            ]);
+
+            if ($response->failed()) {
+                Log::warning("Failed to register uninstall webhook for {$shop}: " . $response->body());
+            } else {
+                Log::info("Successfully registered uninstall webhook for {$shop}");
+            }
+        } catch (Exception $e) {
+            Log::error("Webhook registration exception for {$shop}: " . $e->getMessage());
+        }
+    }
+
+
+    /**
      * Search for customer GID by email.
      */
     protected function getShopifyCustomerIdByEmail(string $email, string $shopDomain): ?string

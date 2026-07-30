@@ -669,7 +669,7 @@ class B2BRegistrationController extends Controller
 
             if ($totalPrice > 0) {
                 $mutation = '
-                mutation appSubscriptionCreate($name: String!, $returnUrl: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+                mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
                   appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
                     appSubscription {
                       id

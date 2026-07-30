@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="shopify-api-key" content="{{ config('shopify.api_key') }}">
     <title>Connecting to Shopify...</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -86,16 +87,6 @@
     </style>
     <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
     <script type="text/javascript">
-        // Extract host and initialize App Bridge
-        const host = new URLSearchParams(window.location.search).get("host");
-        if (typeof shopify !== 'undefined') {
-            shopify.config({
-                apiKey: "{{ config('shopify.api_key') }}",
-                host: host,
-                forceRedirect: true
-            });
-        }
-
         // Escape the iframe context for OAuth redirect
         const redirectUrl = "{{ $redirectUrl }}";
         if (window.top !== window.self) {

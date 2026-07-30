@@ -153,6 +153,11 @@ export default function QuoteSettings() {
     <Page
       backAction={{ content: 'Extensions', onAction: () => navigate(-1) }}
       title="Quote Requests & Settings"
+      titleMetadata={
+        <Badge tone={productPage || cartPage ? "success" : "attention"}>
+          {productPage || cartPage ? "Active" : "Inactive"}
+        </Badge>
+      }
       primaryAction={selectedTab === 0 ? {
         content: 'Save Settings',
         onAction: handleSave,

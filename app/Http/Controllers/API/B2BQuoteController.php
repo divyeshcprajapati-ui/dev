@@ -53,10 +53,15 @@ class B2BQuoteController extends Controller
     /**
      * Get a single quote details.
      */
-    public function show($id): JsonResponse
+    public function show(Request $request, $id): JsonResponse
     {
         try {
-            $quote = B2BQuote::with('items')->findOrFail($id);
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+            $query = B2BQuote::with('items');
+            if ($shop) {
+                $query->where('shop_domain', $shop);
+            }
+            $quote = $query->findOrFail($id);
             return response()->json([
                 'success' => true,
                 'data' => $quote
@@ -197,7 +202,12 @@ class B2BQuoteController extends Controller
     public function update(Request $request, $id): JsonResponse
     {
         try {
-            $quote = B2BQuote::findOrFail($id);
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+            $query = B2BQuote::query();
+            if ($shop) {
+                $query->where('shop_domain', $shop);
+            }
+            $quote = $query->findOrFail($id);
 
             $validated = $request->validate([
                 'quoted_price' => 'nullable|numeric',
@@ -271,10 +281,15 @@ class B2BQuoteController extends Controller
     /**
      * Send quote back to customer (Approve / Sent status).
      */
-    public function send($id): JsonResponse
+    public function send(Request $request, $id): JsonResponse
     {
         try {
-            $quote = B2BQuote::findOrFail($id);
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+            $query = B2BQuote::query();
+            if ($shop) {
+                $query->where('shop_domain', $shop);
+            }
+            $quote = $query->findOrFail($id);
             $quote->update(['status' => 'Sent']);
 
             Log::info("B2B Quote Sent: ID {$id}");

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy, startTransition } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { quoteService } from '../services/quoteService';
 import {
@@ -16,7 +16,8 @@ import {
     Icon
 } from '@shopify/polaris';
 import { SearchIcon, FilterIcon } from '@shopify/polaris-icons';
-import B2BRegistrationForm from './B2BRegistrationForm';
+
+const B2BRegistrationForm = lazy(() => import('./B2BRegistrationForm'));
 
 export default function B2BExtensionsHub() {
     const navigate = useNavigate();
@@ -27,13 +28,32 @@ export default function B2BExtensionsHub() {
     const [isQuoteActive, setIsQuoteActive] = useState(false);
 
     useEffect(() => {
+        const CACHE_KEY = 'b2b_quote_status_cache';
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
         const checkQuoteStatus = async () => {
+            // Serve from cache first — avoids API round-trip on every '/' mount
+            try {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { value, expiresAt } = JSON.parse(cached);
+                    if (Date.now() < expiresAt) {
+                        setIsQuoteActive(value);
+                        return; // cache hit — skip API call
+                    }
+                }
+            } catch (_) { /* ignore malformed cache */ }
+
+            // Cache miss or expired — fetch from API
             try {
                 const res = await quoteService.getSettings();
                 if (res && res.success && res.data) {
                     const data = res.data;
                     const active = (data.productPage === 'true' || data.productPage === true || data.cartPage === 'true' || data.cartPage === true);
                     setIsQuoteActive(active);
+                    try {
+                        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ value: active, expiresAt: Date.now() + CACHE_TTL }));
+                    } catch (_) { /* storage quota exceeded — skip caching */ }
                 }
             } catch (e) {
                 console.error("Error loading quote settings in hub", e);
@@ -201,7 +221,28 @@ export default function B2BExtensionsHub() {
     });
 
     if (currentView === 'b2b-registration') {
-        return <B2BRegistrationForm onBack={() => { setCurrentView('hub'); navigate('/'); }} />;
+        return (
+            <Suspense fallback={
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+                    <div style={{
+                        width: '30px',
+                        height: '30px',
+                        border: '3px solid rgba(0, 128, 96, 0.15)',
+                        borderTop: '3px solid #008060',
+                        borderRadius: '50%',
+                        animation: 'spin-reg 0.8s linear infinite'
+                    }} />
+                    <style>{`
+                        @keyframes spin-reg {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                    `}</style>
+                </div>
+            }>
+                <B2BRegistrationForm onBack={() => { startTransition(() => { setCurrentView('hub'); navigate('/'); }); }} />
+            </Suspense>
+        );
     }
 
     return (
@@ -265,7 +306,9 @@ export default function B2BExtensionsHub() {
                                     accessibilityLabel={`View details for ${title}`}
                                     onClick={() => {
                                         if (id === 'b2b-registration') {
-                                            setCurrentView('b2b-registration');
+                                            startTransition(() => {
+                                                setCurrentView('b2b-registration');
+                                            });
                                         } else if (id === 'quote-requests') {
                                             navigate('/quotes');
                                         }

@@ -142,17 +142,23 @@ class VerifyShopifySessionToken
 
     /**
      * Decode and verify standard HS256 JWT Shopify session token.
+     *
+     * Fixes applied:
+     * 1. Base64 URL padding added before decode (prevents silent failures).
+     * 2. Clock skew tolerance of 30s on expiry (accommodates frontend 50s token cache + network latency).
+     * 3. Detailed per-step logging for easier debugging.
      */
     private function decodeSessionToken(string $token, string $secret): ?array
     {
         $parts = explode('.', $token);
         if (count($parts) !== 3) {
+            Log::warning('[VerifyShopifySessionToken] Malformed JWT: expected 3 parts, got ' . count($parts));
             return null;
         }
 
         list($headerB64, $payloadB64, $signatureB64) = $parts;
 
-        // Verify signature using HMAC SHA256
+        // Verify HMAC SHA256 signature
         $calculatedSignature = hash_hmac(
             'sha256',
             "$headerB64.$payloadB64",
@@ -160,27 +166,35 @@ class VerifyShopifySessionToken
             true
         );
 
-        // URL-safe base64 decode for signature
-        $sigDecoded = base64_decode(strtr($signatureB64, '-_', '+/'));
+        // URL-safe base64 → standard base64 with proper padding, then decode
+        $sigDecoded = base64_decode(str_pad(strtr($signatureB64, '-_', '+/'), strlen($signatureB64) % 4 === 0 ? strlen($signatureB64) : strlen($signatureB64) + (4 - strlen($signatureB64) % 4), '='));
 
-        if (!hash_equals($calculatedSignature, $sigDecoded)) {
+        if ($sigDecoded === false || !hash_equals($calculatedSignature, $sigDecoded)) {
+            Log::warning('[VerifyShopifySessionToken] Signature verification failed. Check that SHOPIFY_API_SECRET in .env matches your Shopify app client secret.');
             return null;
         }
 
-        $payload = json_decode(base64_decode(strtr($payloadB64, '-_', '+/')), true);
+        // Decode payload with proper base64 URL padding
+        $payloadJson = base64_decode(str_pad(strtr($payloadB64, '-_', '+/'), strlen($payloadB64) % 4 === 0 ? strlen($payloadB64) : strlen($payloadB64) + (4 - strlen($payloadB64) % 4), '='));
+        $payload = $payloadJson ? json_decode($payloadJson, true) : null;
+
         if (!$payload) {
+            Log::warning('[VerifyShopifySessionToken] Failed to decode JWT payload.');
             return null;
         }
 
         $now = time();
 
-        // Validate expiration time
-        if (isset($payload['exp']) && $payload['exp'] < $now) {
-            Log::warning("[VerifyShopifySessionToken] Token expired. Exp: {$payload['exp']}, Now: {$now}");
+        // Validate expiration time with 30-second clock skew tolerance.
+        // This is necessary because the frontend caches the token for up to 50s
+        // and network/processing latency can push the backend check past `exp`.
+        $skew = 30;
+        if (isset($payload['exp']) && $payload['exp'] < ($now - $skew)) {
+            Log::warning("[VerifyShopifySessionToken] Token expired (with {$skew}s skew). Exp: {$payload['exp']}, Now: {$now}, Delta: " . ($now - $payload['exp']) . 's');
             return null;
         }
 
-        // Validate not before (with 10-second skew tolerance)
+        // Validate not-before (with 10-second skew tolerance)
         if (isset($payload['nbf']) && $payload['nbf'] > ($now + 10)) {
             Log::warning("[VerifyShopifySessionToken] Token not active yet. Nbf: {$payload['nbf']}, Now: {$now}");
             return null;

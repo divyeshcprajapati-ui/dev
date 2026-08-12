@@ -30,26 +30,72 @@ export default function CustomerListing() {
 
   const navigate = useNavigate();
 
+  const CACHE_KEY_PREFIX = 'b2b_customers_cache_';
+  const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+  const getCacheKey = (pageNumber, statusFilter) =>
+    `${CACHE_KEY_PREFIX}${statusFilter}_p${pageNumber}`;
+
+  const readCache = (pageNumber, statusFilter) => {
+    try {
+      const raw = sessionStorage.getItem(getCacheKey(pageNumber, statusFilter));
+      if (!raw) return null;
+      const { data, expiresAt } = JSON.parse(raw);
+      if (Date.now() > expiresAt) return null; // expired
+      return data;
+    } catch (_) { return null; }
+  };
+
+  const writeCache = (pageNumber, statusFilter, payload) => {
+    try {
+      sessionStorage.setItem(
+        getCacheKey(pageNumber, statusFilter),
+        JSON.stringify({ data: payload, expiresAt: Date.now() + CACHE_TTL })
+      );
+    } catch (_) { /* storage quota */ }
+  };
+
+  const applyResponse = (response, pageNumber) => {
+    if (response && response.success && Array.isArray(response.data)) {
+      setSubmissions(response.data);
+      if (response.meta) {
+        setTotalPages(response.meta.last_page || 1);
+        setTotalItems(response.meta.total || 0);
+        setHasMore(!!response.meta.has_more);
+      }
+    } else if (Array.isArray(response)) {
+      setSubmissions(response);
+      setTotalPages(1);
+      setTotalItems(response.length);
+      setHasMore(false);
+    } else {
+      setSubmissions([]);
+    }
+  };
+
   const fetchLeads = async (pageNumber = page, statusFilter = activeTab) => {
-    setLoading(true);
     setError('');
+
+    // Stale-while-revalidate: render cached data instantly, then refresh silently
+    const cached = readCache(pageNumber, statusFilter);
+    if (cached) {
+      applyResponse(cached, pageNumber);
+      // Still revalidate in background — no loading spinner for cache hits
+      registrationService.getApplications(pageNumber, 20, statusFilter)
+        .then(fresh => {
+          applyResponse(fresh, pageNumber);
+          writeCache(pageNumber, statusFilter, fresh);
+        })
+        .catch(() => {}); // silent background refresh failure is fine
+      return;
+    }
+
+    // Cache miss — show loading spinner
+    setLoading(true);
     try {
       const response = await registrationService.getApplications(pageNumber, 20, statusFilter);
-      if (response && response.success && Array.isArray(response.data)) {
-        setSubmissions(response.data);
-        if (response.meta) {
-          setTotalPages(response.meta.last_page || 1);
-          setTotalItems(response.meta.total || 0);
-          setHasMore(!!response.meta.has_more);
-        }
-      } else if (Array.isArray(response)) {
-        setSubmissions(response);
-        setTotalPages(1);
-        setTotalItems(response.length);
-        setHasMore(false);
-      } else {
-        setSubmissions([]);
-      }
+      applyResponse(response, pageNumber);
+      writeCache(pageNumber, statusFilter, response);
     } catch (err) {
       console.error("Failed fetching leads:", err);
       setError(err.message || 'Failed to fetch registered customers. Using mock/local cache.');
@@ -58,7 +104,6 @@ export default function CustomerListing() {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            // Apply client-side paging for fallback offline cache
             const filtered = parsed.filter(sub => {
               const s = (sub.status || 'Pending').toLowerCase();
               if (statusFilter === 'all') return true;
@@ -70,7 +115,6 @@ export default function CustomerListing() {
             const limit = 20;
             const startIndex = (pageNumber - 1) * limit;
             const paged = filtered.slice(startIndex, startIndex + limit);
-            
             setSubmissions(paged);
             setTotalPages(Math.ceil(filtered.length / limit) || 1);
             setTotalItems(filtered.length);

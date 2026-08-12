@@ -490,34 +490,75 @@ export default function SinglePageRegistration() {
         setLoading(true);
         try {
             // Build metafields payload
-            const metafieldsPayload = {};
+            // Strategy: Build a guaranteed-accurate lookup from formData keys directly,
+            // then overlay any explicit metafield config (namespace/key/type/ownerType)
+            // from the field definitions for those fields that have it configured.
+            // This is robust regardless of what field IDs the DB returns — the old
+            // approach broke when DB field IDs didn't match the stateKey mapping.
+
+            // Step 1: Build a fieldId → field config lookup from steps
             const allFields = steps.reduce((acc, step) => [...acc, ...step.fields], []);
-            allFields.forEach(field => {
-                const stateKey = field.id === 'company_name' ? 'companyName' :
-                                 field.id === 'company_address' ? 'companyAddress' :
-                                 field.id === 'apartment' ? 'apartment' :
-                                 field.id === 'company_city' ? 'companyCity' :
-                                 field.id === 'province' ? 'province' :
-                                 field.id === 'zip' ? 'zip' :
-                                 field.id === 'message' ? 'message' :
-                                 field.id === 'number' ? 'number' :
-                                 field.id === 'tax_id' ? 'taxId' :
-                                 field.id === 'email' ? 'email' :
-                                 field.id === 'first_name' ? 'firstName' :
-                                 field.id === 'last_name' ? 'lastName' :
-                                 field.id === 'company_country' ? 'companyCountry' : field.id;
-                const val = formData[stateKey];
-                
-                if (field.metafieldType && field.metafieldType !== 'none' && val !== undefined && val !== null && val !== '') {
-                    const ns = field.metafieldNamespace || 'custom';
-                    const mKey = field.metafieldKey || field.id;
-                    metafieldsPayload[`${ns}.${mKey}`] = {
-                        value: val,
-                        owner_type: field.metafieldType,
-                        type: field.metafieldValueType || 'single_line_text_field'
-                    };
-                }
+            const fieldConfigById = {};
+            allFields.forEach(f => { fieldConfigById[f.id] = f; });
+
+            // Step 2: Define the canonical formData → metafield key mapping
+            // Each entry: [formDataKey, fallbackMetafieldKey, fieldId]
+            const fieldMap = [
+                ['firstName',     'first_name',       'first_name'],
+                ['lastName',      'last_name',        'last_name'],
+                ['email',         'email',            'email'],
+                ['companyName',   'company_name',     'company_name'],
+                ['companyAddress','company_address',  'company_address'],
+                ['apartment',     'apartment',        'apartment'],
+                ['companyCity',   'company_city',     'company_city'],
+                ['companyCountry','company_country',  'company_country'],
+                ['province',      'province',         'province'],
+                ['zip',           'zip',              'zip'],
+                ['taxId',         'tax_id',           'tax_id'],
+                ['message',       'message',          'message'],
+                ['number',        'number',           'number'],
+            ];
+
+            const metafieldsPayload = {};
+            fieldMap.forEach(([dataKey, fallbackMfKey, fieldId]) => {
+                const val = formData[dataKey];
+                if (val === undefined || val === null || val === '') return;
+
+                // Look up any admin-configured metafield settings for this field
+                const fieldCfg = fieldConfigById[fieldId] || {};
+
+                // Skip if admin explicitly set type to 'none' AND no namespace/key override
+                // (meaning this field is intentionally excluded from metafields)
+                const hasExplicitConfig = fieldCfg.metafieldType && fieldCfg.metafieldType !== 'none';
+                const hasNsOrKey = fieldCfg.metafieldNamespace || fieldCfg.metafieldKey;
+
+                const ownerType = hasExplicitConfig ? fieldCfg.metafieldType : 'customer';
+                const ns  = fieldCfg.metafieldNamespace  || 'custom';
+                const mKey = fieldCfg.metafieldKey       || fallbackMfKey;
+                const mType = fieldCfg.metafieldValueType || 'single_line_text_field';
+
+                metafieldsPayload[`${ns}.${mKey}`] = {
+                    value: String(val),
+                    owner_type: ownerType,
+                    type: mType,
+                };
             });
+
+            // Also include phone (assembled from phoneCode + phone)
+            const phoneVal = formData.phone ? `${formData.phoneCode || ''} ${formData.phone}`.trim() : '';
+            if (phoneVal) {
+                const phoneCfg = fieldConfigById['phone'] || {};
+                const phoneNs   = phoneCfg.metafieldNamespace || 'custom';
+                const phoneMKey = phoneCfg.metafieldKey       || 'phone';
+                const phoneType = phoneCfg.metafieldValueType || 'single_line_text_field';
+                const phoneOwner = (phoneCfg.metafieldType && phoneCfg.metafieldType !== 'none')
+                    ? phoneCfg.metafieldType : 'customer';
+                metafieldsPayload[`${phoneNs}.${phoneMKey}`] = {
+                    value: phoneVal,
+                    owner_type: phoneOwner,
+                    type: phoneType,
+                };
+            }
 
             const submitData = {
                 firstName: formData.firstName || '',
@@ -529,18 +570,19 @@ export default function SinglePageRegistration() {
                 zip: formData.zip || '',
                 country: formData.companyCountry || '',
                 taxId: formData.taxId || '',
-                phone: formData.phone ? `${formData.phoneCode} ${formData.phone}`.trim() : '',
+                phone: phoneVal,
                 notes: formData.message || '',
                 metafields: metafieldsPayload
             };
 
             const response = await registrationService.submitRegistration(submitData, fileObject);
             
-            if (response.success) {
-                setLoading(false);
+            if (response && response.success) {
+                // Set submitted FIRST so the success screen renders regardless of loading state cleanup
                 setSubmitted(true);
+                setLoading(false);
             } else {
-                setGeneralError(response.message || 'Submission failed. Please try again.');
+                setGeneralError(response?.message || 'Submission failed. Please try again.');
                 setLoading(false);
             }
         } catch (error) {

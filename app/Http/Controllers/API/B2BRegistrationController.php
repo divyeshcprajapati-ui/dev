@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Models\B2BNotificationSetting;
+use App\Jobs\TriggerB2BRegistrationFlow;
 use Exception;
 use Illuminate\Http\Request;
 use App\Traits\HasShopifyApi;
@@ -112,6 +113,8 @@ class B2BRegistrationController extends Controller
             }
 
             // Parse metafields if it's sent as a string (JSON) or array
+            // IMPORTANT: Store empty array [] for "{}" — do NOT collapse to null.
+            // An empty metafields payload is valid; null means "not provided at all".
             $metafields = null;
             $rawMetafields = $request->input('metafields');
             Log::info('Raw metafields input: ' . (isset($rawMetafields) ? gettype($rawMetafields) : 'not set'), [
@@ -120,16 +123,23 @@ class B2BRegistrationController extends Controller
 
             if (isset($rawMetafields)) {
                 if (is_array($rawMetafields)) {
-                    $metafields = $rawMetafields;
-                } elseif (is_string($rawMetafields)) {
-                    $metafields = json_decode($rawMetafields, true);
+                    // Already decoded array (e.g. sent as application/json)
+                    $metafields = $rawMetafields; // keep as-is, even if empty []
+                } elseif (is_string($rawMetafields) && $rawMetafields !== '') {
+                    $decoded = json_decode($rawMetafields, true);
                     if (json_last_error() !== JSON_ERROR_NONE) {
                         Log::error('Metafields JSON decode error: ' . json_last_error_msg());
+                        // Leave $metafields as null on parse failure
+                    } else {
+                        // Preserve decoded value even when it is an empty array [].
+                        // json_decode("{}") returns [] which is falsy in PHP — this was the bug.
+                        $metafields = $decoded;
                     }
                 }
             }
 
-            Log::info('Parsed metafields: ', ['metafields' => $metafields]);
+            $metafieldCount = is_array($metafields) ? count($metafields) : 0;
+            Log::info('Parsed metafields: ' . ($metafields !== null ? "{$metafieldCount} entries" : 'not provided'), ['metafields' => $metafields]);
 
             // Save B2B Application Data to database
             $application = B2BApplication::create([
@@ -154,21 +164,18 @@ class B2BRegistrationController extends Controller
 
             Log::info('New B2B registration application saved', ['application_id' => $application->id]);
 
-            // Trigger Shopify Flow Trigger event
-            try {
-                $this->triggerFlowRegistrationSubmitted($application, $shopDomain);
-            } catch (Exception $flowEx) {
-                Log::error('Shopify Flow trigger execution failed: ' . $flowEx->getMessage());
-            }
+            // Dispatch the Shopify Flow trigger AFTER the response is sent
+            // so the 5-15s GraphQL call never blocks the browser's success screen.
+            TriggerB2BRegistrationFlow::dispatch($application->id, $shopDomain)->afterResponse();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Your B2B application has been submitted successfully and is under review.',
-                'data' => [
-                    'id' => $application->id,
+                'data'    => [
+                    'id'          => $application->id,
                     'companyName' => $application->company_name,
-                    'email' => $application->email,
-                    'status' => $application->status,
+                    'email'       => $application->email,
+                    'status'      => $application->status,
                 ]
             ], 201);
 

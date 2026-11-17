@@ -63,5 +63,8 @@ class Kernel extends HttpKernel
         'signed' => \App\Http\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        'check.b2b.subscription' => \App\Http\Middleware\CheckB2BSubscription::class,
+        'verify.shopify.token' => \App\Http\Middleware\VerifyShopifySessionToken::class,
+        'shopify.csp' => \App\Http\Middleware\ShopifyCspMiddleware::class,
     ];
 }

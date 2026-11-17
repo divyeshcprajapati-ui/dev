@@ -19,7 +19,7 @@ export default function B2BDashboard() {
 
   return (
     <Page
-      title="Welcome to b2bDev,"
+      title="Welcome to b2bDev"
       primaryAction={<Button variant="secondary">Help center</Button>}
     >
       <Layout>
@@ -63,12 +63,12 @@ export default function B2BDashboard() {
               {/* Checklist Items */}
               <BlockStack gap="400">
                 {/* Step 1: Set up B2B Company Registration form */}
-                <div 
+                <div
                   onClick={() => navigate('/b2b-register')}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '12px', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
                     cursor: 'pointer',
                     padding: '8px',
                     borderRadius: '6px',
@@ -104,12 +104,12 @@ export default function B2BDashboard() {
                 <div style={{ padding: '8px' }}>
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <div style={{ 
-                        width: '20px', 
-                        height: '20px', 
-                        borderRadius: '50%', 
-                        border: '2px solid #8c9196', 
-                        boxSizing: 'border-box' 
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        border: '2px solid #8c9196',
+                        boxSizing: 'border-box'
                       }} />
                       <Text variant="bodyMd" fontWeight="semibold">
                         Explore all B2B extensions in Customer Account
@@ -145,13 +145,13 @@ export default function B2BDashboard() {
               {/* Tutorial 1 */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
                 <Card padding="0">
-                  <Box 
-                    style={{ 
-                      height: '120px', 
+                  <Box
+                    style={{
+                      height: '120px',
                       background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
                       borderTopLeftRadius: '8px',
                       borderTopRightRadius: '8px'
-                    }} 
+                    }}
                   />
                   <Box padding="400">
                     <BlockStack gap="200" align="start">
@@ -167,13 +167,13 @@ export default function B2BDashboard() {
               {/* Tutorial 2 */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
                 <Card padding="0">
-                  <Box 
-                    style={{ 
-                      height: '120px', 
+                  <Box
+                    style={{
+                      height: '120px',
                       background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
                       borderTopLeftRadius: '8px',
                       borderTopRightRadius: '8px'
-                    }} 
+                    }}
                   />
                   <Box padding="400">
                     <BlockStack gap="200" align="start">
@@ -189,13 +189,13 @@ export default function B2BDashboard() {
               {/* Tutorial 3 */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
                 <Card padding="0">
-                  <Box 
-                    style={{ 
-                      height: '120px', 
+                  <Box
+                    style={{
+                      height: '120px',
                       background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
                       borderTopLeftRadius: '8px',
                       borderTopRightRadius: '8px'
-                    }} 
+                    }}
                   />
                   <Box padding="400">
                     <BlockStack gap="200" align="start">

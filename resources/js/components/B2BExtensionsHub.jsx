@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense, lazy, startTransition } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { quoteService } from '../services/quoteService';
 import {
     Page,
     Card,
@@ -14,12 +16,51 @@ import {
     Icon
 } from '@shopify/polaris';
 import { SearchIcon, FilterIcon } from '@shopify/polaris-icons';
-import B2BRegistrationForm from './B2BRegistrationForm';
+
+const B2BRegistrationForm = lazy(() => import('./B2BRegistrationForm'));
 
 export default function B2BExtensionsHub() {
+    const navigate = useNavigate();
+    const location = useLocation();
     const [selectedTab, setSelectedTab] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
-    const [currentView, setCurrentView] = useState('hub');
+    const [currentView, setCurrentView] = useState(location.pathname === '/b2b-register' ? 'b2b-registration' : 'hub');
+    const [isQuoteActive, setIsQuoteActive] = useState(false);
+
+    useEffect(() => {
+        const CACHE_KEY = 'b2b_quote_status_cache';
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+        const checkQuoteStatus = async () => {
+            // Serve from cache first — avoids API round-trip on every '/' mount
+            try {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { value, expiresAt } = JSON.parse(cached);
+                    if (Date.now() < expiresAt) {
+                        setIsQuoteActive(value);
+                        return; // cache hit — skip API call
+                    }
+                }
+            } catch (_) { /* ignore malformed cache */ }
+
+            // Cache miss or expired — fetch from API
+            try {
+                const res = await quoteService.getSettings();
+                if (res && res.success && res.data) {
+                    const data = res.data;
+                    const active = (data.productPage === 'true' || data.productPage === true || data.cartPage === 'true' || data.cartPage === true);
+                    setIsQuoteActive(active);
+                    try {
+                        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ value: active, expiresAt: Date.now() + CACHE_TTL }));
+                    } catch (_) { /* storage quota exceeded — skip caching */ }
+                }
+            } catch (e) {
+                console.error("Error loading quote settings in hub", e);
+            }
+        };
+        checkQuoteStatus();
+    }, []);
 
     const handleTabChange = (selectedTabIndex) => {
         setSelectedTab(selectedTabIndex);
@@ -138,7 +179,7 @@ export default function B2BExtensionsHub() {
             id: 'csv-upload-order',
             title: 'CSV upload order',
             description: 'Allows wholesale buyers to upload large order sheets via CSV for instant cart generation.',
-            status: 'Active',
+            status: 'Inactive',
             isPlus: false,
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)',
@@ -149,23 +190,17 @@ export default function B2BExtensionsHub() {
             )
         },
         {
-            id: 'shopping-lists',
-            title: 'Shopping lists',
-            description: 'Allow clients to save re-usable purchase drafts and custom shopping lists.',
-            status: 'Inactive',
+            id: 'quote-requests',
+            title: 'Quote requests',
+            description: 'Manage your quote settings and review all quote submissions.',
+            status: isQuoteActive ? 'Active' : 'Inactive',
             isPlus: false,
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',
             mockIcon: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
-                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#455a64' }} />
-                        <div style={{ width: '12px', height: '2px', backgroundColor: '#78909c' }} />
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                    <div style={{ width: '14px', height: '8px', border: '1.5px solid #455a64', borderRadius: '2px' }} />
+                    <div style={{ width: '8px', height: '2px', backgroundColor: '#455a64' }} />
                 </div>
             )
         }
@@ -186,7 +221,28 @@ export default function B2BExtensionsHub() {
     });
 
     if (currentView === 'b2b-registration') {
-        return <B2BRegistrationForm onBack={() => setCurrentView('hub')} />;
+        return (
+            <Suspense fallback={
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+                    <div style={{
+                        width: '30px',
+                        height: '30px',
+                        border: '3px solid rgba(0, 128, 96, 0.15)',
+                        borderTop: '3px solid #008060',
+                        borderRadius: '50%',
+                        animation: 'spin-reg 0.8s linear infinite'
+                    }} />
+                    <style>{`
+                        @keyframes spin-reg {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                    `}</style>
+                </div>
+            }>
+                <B2BRegistrationForm onBack={() => { startTransition(() => { setCurrentView('hub'); navigate('/'); }); }} />
+            </Suspense>
+        );
     }
 
     return (
@@ -250,7 +306,11 @@ export default function B2BExtensionsHub() {
                                     accessibilityLabel={`View details for ${title}`}
                                     onClick={() => {
                                         if (id === 'b2b-registration') {
-                                            setCurrentView('b2b-registration');
+                                            startTransition(() => {
+                                                setCurrentView('b2b-registration');
+                                            });
+                                        } else if (id === 'quote-requests') {
+                                            navigate('/quotes');
                                         }
                                     }}
                                 >

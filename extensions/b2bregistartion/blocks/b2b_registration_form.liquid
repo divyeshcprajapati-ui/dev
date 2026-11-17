@@ -1,0 +1,49 @@
+<div class="b2b-registration-block-wrapper" style="background-color: {{ block.settings.bg_color }};">
+  <div class="b2b-registration-card">
+    <div class="b2b-registration-header">
+      <h2 style="color: {{ block.settings.text_color }};">{{ block.settings.title }}</h2>
+      <p style="color: {{ block.settings.text_color_subdued }};">{{ block.settings.description }}</p>
+    </div>
+
+    <form id="b2b-registration-form" enctype="multipart/form-data" novalidate>
+      <input type="hidden" id="shopify-shop-domain" value="{{ shop.permanent_domain }}">
+      {% if customer %}
+        <input type="hidden" id="shopify-customer-id" value="gid://shopify/Customer/{{ customer.id }}">
+      {% endif %}
+      <div id="general-error" class="b2b-error-banner hidden"></div>
+      <div id="general-success" class="b2b-success-banner hidden"></div>
+
+      <!-- Container for dynamic fields -->
+      <div id="b2b-dynamic-fields-container" style="display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;">
+        <div style="text-align: center; padding: 20px; color: #6b7280;">Loading form configuration...</div>
+      </div>
+
+      <!-- Submit Actions -->
+      <div class="b2b-form-actions">
+        <button type="submit" class="btn btn-primary submit-btn" style="background-color: {{ block.settings.primary_color }}; color: {{ block.settings.btn_text_color }}; width: 100%;">
+          <span class="btn-text">{{ block.settings.btn_label }}</span>
+          <span class="btn-spinner hidden"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "B2B Registration Form",
+  "target": "section",
+  "stylesheet": "b2b_registration.css",
+  "javascript": "b2b_registration.js",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "B2B registration" },
+    { "type": "textarea", "id": "description", "label": "Description", "default": "Fill out the details below to register your company account." },
+    { "type": "text", "id": "btn_label", "label": "Submit Button Label", "default": "Register" },
+    { "type": "color", "id": "bg_color", "label": "Background Color", "default": "#ffffff" },
+    { "type": "color", "id": "text_color", "label": "Heading Text Color", "default": "#111827" },
+    { "type": "color", "id": "text_color_subdued", "label": "Description Text Color", "default": "#6b7280" },
+    { "type": "color", "id": "primary_color", "label": "Primary Color", "default": "#1a1a1a" },
+    { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" }
+  ]
+}
+{% endschema %}

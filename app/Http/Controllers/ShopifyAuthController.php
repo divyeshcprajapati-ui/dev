@@ -67,7 +67,9 @@ class ShopifyAuthController extends Controller
         $tokenUrl = "https://{$shop}/admin/oauth/access_token";
         
         try {
-            $response = Http::post($tokenUrl, [
+            $response = Http::asForm()->withHeaders([
+                'Accept' => 'application/json'
+            ])->post($tokenUrl, [
                 'client_id' => config('shopify.api_key'),
                 'client_secret' => $apiSecret,
                 'code' => $code,

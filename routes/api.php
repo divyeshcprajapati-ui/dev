@@ -54,7 +54,7 @@ Route::middleware('verify.shopify.token')->group(function () {
     Route::get('/b2b/quotes', [B2BQuoteController::class, 'index']);
     Route::get('/b2b/quotes/{id}', [B2BQuoteController::class, 'show']);
     Route::post('/b2b/quotes', [B2BQuoteController::class, 'store'])->middleware('check.b2b.subscription:quote');
-    Route::post('/b2b/quotes/{id}/update', [B2BQuoteController::class, 'update']);
+    Route::post('/b2b/quotes/{id}/update', [B2BQuoteController::class, 'update'])->middleware('throttle:30,1');
     Route::post('/b2b/quotes/{id}/send', [B2BQuoteController::class, 'send'])->middleware('check.b2b.subscription:quote');
 
     // Location fetching routes for registration form

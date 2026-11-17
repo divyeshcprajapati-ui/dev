@@ -65,5 +65,6 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'check.b2b.subscription' => \App\Http\Middleware\CheckB2BSubscription::class,
         'verify.shopify.token' => \App\Http\Middleware\VerifyShopifySessionToken::class,
+        'shopify.csp' => \App\Http\Middleware\ShopifyCspMiddleware::class,
     ];
 }

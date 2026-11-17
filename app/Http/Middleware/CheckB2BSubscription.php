@@ -67,13 +67,13 @@ class CheckB2BSubscription
     }
 
     /**
-     * Resolve shop domain dynamically from request queries, headers, or referrer.
+     * Resolve shop domain dynamically from request queries, headers, body, or referrer.
      */
     private function resolveShopDomain(Request $request): ?string
     {
         $shop = $request->query('shop') ?? $request->header('X-Shop-Domain');
-        if (!$shop && $request->has('shopDomain')) {
-            $shop = $request->input('shopDomain');
+        if (!$shop) {
+            $shop = $request->input('shop_domain') ?? $request->input('shopDomain') ?? $request->input('shop');
         }
         
         if (!$shop) {

@@ -1,0 +1,141 @@
+{% render 'b2b_i18n_script' %}
+<div class="b2b-shopping-lists" style="max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <h2 id="b2b-sl-title" style="margin:0 0 12px 0;font-size:22px;color:#111827;">{{ block.settings.title }}</h2>
+  <div id="b2b-sl-status" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:14px;font-weight:600;"></div>
+
+  {%- if customer -%}
+    <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+      <input id="b2b-sl-name" type="text" placeholder="New shopping list name (saves current cart)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+      <button id="b2b-sl-save-cart" type="button" style="padding:10px 18px;background:#008060;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Save Current Cart as List</button>
+    </div>
+    <div id="b2b-sl-container" style="color:#64748b;">Loading shopping lists...</div>
+  {%- else -%}
+    <p style="color:#64748b;margin-bottom:16px;">Please log in to manage your reusable wholesale shopping lists.</p>
+    <a href="/account/login" style="display:inline-block;padding:10px 20px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Log In</a>
+  {%- endif -%}
+</div>
+
+<script>
+(function() {
+  const API_BASE = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
+  const shopDomain = '{{ shop.permanent_domain }}';
+  const customerEmail = '{{ customer.email }}';
+  const customerName = '{{ customer.name }}';
+  const companyName = '{{ customer.default_address.company }}';
+  const activeLocale = '{{ request.locale.iso_code }}';
+  let i18n = {};
+  if (!customerEmail) return;
+
+  function setStatus(msg, isError) {
+    const el = document.getElementById('b2b-sl-status');
+    el.style.display = 'block';
+    el.style.background = isError ? '#fee2e2' : '#dcfce7';
+    el.style.color = isError ? '#991b1b' : '#166534';
+    el.textContent = msg;
+  }
+
+  async function loadLists() {
+    if (window.B2B_I18N && !i18n._loaded) {
+      i18n = await window.B2B_I18N.load(API_BASE, shopDomain, activeLocale, 'list');
+      i18n._loaded = true;
+      if (i18n.title) document.getElementById('b2b-sl-title').textContent = i18n.title;
+      if (i18n.create_list) document.getElementById('b2b-sl-save-cart').textContent = i18n.create_list;
+    }
+    const container = document.getElementById('b2b-sl-container');
+    try {
+      const res = await fetch(`${API_BASE}/api/b2b/shopping-lists?email=${encodeURIComponent(customerEmail)}&shop=${encodeURIComponent(shopDomain)}`, {
+        headers: { 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' }
+      });
+      const json = await res.json();
+      const lists = json.data || [];
+      if (!lists.length) { container.innerHTML = '<p>No shopping lists saved yet.</p>'; return; }
+      container.innerHTML = lists.map(l => `
+        <div style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div><strong style="font-size:16px;color:#111827;">${l.name}</strong> <span style="margin-left:8px;padding:3px 10px;border-radius:99px;font-size:12px;background:#f1f5f9;font-weight:600;">${l.status}</span></div>
+            <div style="display:flex;gap:8px;">
+              ${l.status === 'Draft' ? `<button type="button" data-submit="${l.id}" style="padding:6px 12px;background:#111827;color:#fff;border:none;border-radius:6px;cursor:pointer;">${i18n.submit_approval || 'Submit for Approval'}</button>` : ''}
+              <button type="button" data-cart='${JSON.stringify((l.items || []).filter(i => i.variant_id).map(i => ({ id: Number(i.variant_id), quantity: i.quantity })))}' style="padding:6px 12px;background:#008060;color:#fff;border:none;border-radius:6px;cursor:pointer;">${i18n.add_list_to_cart || 'Add to Cart'}</button>
+              ${l.status === 'Draft' ? `<button type="button" data-delete="${l.id}" style="padding:6px 12px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;cursor:pointer;">Delete</button>` : ''}
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:13px;color:#475569;">${(l.items || []).map(i => `${i.product_title} × ${i.quantity}`).join(' • ') || 'No items'}</div>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('[data-delete]').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.dataset.delete;
+          const r = await fetch(`${API_BASE}/api/b2b/shopping-lists/${id}?shop=${encodeURIComponent(shopDomain)}&email=${encodeURIComponent(customerEmail)}`, {
+            method: 'DELETE',
+            headers: { 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' }
+          });
+          const j = await r.json();
+          setStatus(j.message || 'Deleted.', !r.ok);
+          loadLists();
+        });
+      });
+
+      container.querySelectorAll('[data-submit]').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const id = this.dataset.submit;
+          const r = await fetch(`${API_BASE}/api/b2b/shopping-lists/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({ shop: shopDomain, customer_email: customerEmail, status: 'Pending Approval' })
+          });
+          const j = await r.json();
+          setStatus(j.message || 'Submitted.', !r.ok);
+          loadLists();
+        });
+      });
+
+      container.querySelectorAll('[data-cart]').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const items = JSON.parse(this.dataset.cart || '[]');
+          if (!items.length) { setStatus('No cart-ready variants in this list.', true); return; }
+          const r = await fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
+          if (r.ok) window.location.href = '/cart';
+        });
+      });
+    } catch (e) {
+      container.innerHTML = '<p style="color:#991b1b;">Failed to load shopping lists.</p>';
+    }
+  }
+
+  document.getElementById('b2b-sl-save-cart').addEventListener('click', async function() {
+    const name = document.getElementById('b2b-sl-name').value.trim();
+    if (!name) { setStatus('Enter a list name first.', true); return; }
+    const cart = await (await fetch('/cart.js')).json();
+    const items = (cart.items || []).map(i => ({
+      product_title: i.title,
+      variant_id: String(i.variant_id),
+      sku: i.sku || '',
+      price: (i.price || 0) / 100,
+      quantity: i.quantity,
+      image_url: i.image || ''
+    }));
+    const res = await fetch(`${API_BASE}/api/b2b/shopping-lists`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' },
+      body: JSON.stringify({ shop: shopDomain, name, customer_email: customerEmail, customer_name: customerName, company_name: companyName, status: 'Draft', items })
+    });
+    const json = await res.json();
+    setStatus(json.message || 'Saved.', !res.ok);
+    if (res.ok) { document.getElementById('b2b-sl-name').value = ''; loadLists(); }
+  });
+
+  loadLists();
+})();
+</script>
+
+{% schema %}
+{
+  "name": "B2B Shopping Lists",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "My B2B Shopping Lists" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
+  ]
+}
+{% endschema %}

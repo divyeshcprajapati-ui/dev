@@ -25,15 +25,46 @@ class B2BRegisterRequest extends FormRequest
      */
     public function rules()
     {
-        $country = $this->input('country');
+        $country = strtolower(trim((string) $this->input('country', '')));
+        $countryCode = strtoupper(trim((string) $this->input('country_code', '')));
         $taxIdRule = 'nullable|string|max:100';
 
-        if (strtolower($country) === 'india' || $this->input('country_code') === 'IN') {
-            // Apply GSTIN validation for India
+        // Country-specific Tax ID / GSTIN / International VAT format validation
+        if ($country === 'india' || $countryCode === 'IN') {
             $taxIdRule = [
                 'required',
                 'regex:/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i'
             ];
+        } elseif (!empty($this->input('taxId'))) {
+            $vatPatterns = [
+                'united kingdom' => '/^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$/i',
+                'gb' => '/^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$/i',
+                'germany' => '/^(DE)?[0-9]{9}$/i',
+                'de' => '/^(DE)?[0-9]{9}$/i',
+                'france' => '/^(FR)?[0-9A-Z]{2}[0-9]{9}$/i',
+                'fr' => '/^(FR)?[0-9A-Z]{2}[0-9]{9}$/i',
+                'italy' => '/^(IT)?[0-9]{11}$/i',
+                'it' => '/^(IT)?[0-9]{11}$/i',
+                'spain' => '/^(ES)?[A-Z0-9][0-9]{7}[A-Z0-9]$/i',
+                'es' => '/^(ES)?[A-Z0-9][0-9]{7}[A-Z0-9]$/i',
+                'netherlands' => '/^(NL)?[0-9]{9}B[0-9]{2}$/i',
+                'nl' => '/^(NL)?[0-9]{9}B[0-9]{2}$/i',
+                'belgium' => '/^(BE)?0?[0-9]{9,10}$/i',
+                'be' => '/^(BE)?0?[0-9]{9,10}$/i',
+                'austria' => '/^(AT)?U[0-9]{8}$/i',
+                'at' => '/^(AT)?U[0-9]{8}$/i',
+                'poland' => '/^(PL)?[0-9]{10}$/i',
+                'pl' => '/^(PL)?[0-9]{10}$/i',
+                'sweden' => '/^(SE)?[0-9]{12}$/i',
+                'se' => '/^(SE)?[0-9]{12}$/i',
+                'ireland' => '/^(IE)?[0-9][A-Z0-9\+\*][0-9]{5}[A-Z]{1,2}$/i',
+                'ie' => '/^(IE)?[0-9][A-Z0-9\+\*][0-9]{5}[A-Z]{1,2}$/i',
+            ];
+
+            $pattern = $vatPatterns[$country] ?? $vatPatterns[strtolower($countryCode)] ?? null;
+            if ($pattern) {
+                $taxIdRule = ['nullable', 'string', 'max:100', 'regex:' . $pattern];
+            }
         }
 
         return [

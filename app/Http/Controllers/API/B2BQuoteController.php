@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\B2BQuote;
+use App\Models\ShopifyShop;
+use App\Services\B2BNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -21,18 +23,31 @@ class B2BQuoteController extends Controller
         try {
             $status = $request->query('status');
             $email = $request->query('email');
-            $shop = $request->query('shop');
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
             
-            $query = B2BQuote::with('items')->orderBy('created_at', 'desc');
+            // Auto-mark overdue pending/sent quotes as Expired for this shop
+            B2BQuote::where('shop_domain', $shop)
+                ->whereIn('status', ['Pending', 'Sent'])
+                ->whereNotNull('expiration_date')
+                ->whereDate('expiration_date', '<', now()->toDateString())
+                ->update(['status' => 'Expired']);
+
+            $query = B2BQuote::with('items')
+                ->where('shop_domain', $shop)
+                ->orderBy('created_at', 'desc');
 
             if ($status && $status !== 'all') {
                 $query->where('status', ucfirst($status));
             }
             if ($email) {
                 $query->where('customer_email', $email);
-            }
-            if ($shop) {
-                $query->where('shop_domain', $shop);
             }
 
             $quotes = $query->get();
@@ -57,11 +72,22 @@ class B2BQuoteController extends Controller
     {
         try {
             $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
-            $query = B2BQuote::with('items');
-            if ($shop) {
-                $query->where('shop_domain', $shop);
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
             }
-            $quote = $query->findOrFail($id);
+
+            $quote = B2BQuote::with('items')
+                ->where('shop_domain', $shop)
+                ->where('id', $id)
+                ->firstOrFail();
+
+            if ($quote->expiration_date && $quote->expiration_date->isPast() && in_array($quote->status, ['Pending', 'Sent'], true)) {
+                $quote->update(['status' => 'Expired']);
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $quote
@@ -105,6 +131,37 @@ class B2BQuoteController extends Controller
                 'items.*.quantity' => 'required_with:items|integer|min:1',
                 'items.*.image_url' => 'nullable|string',
             ]);
+
+            // Enforce 4-tier plan limits on quote creation (Grow = max 25 quotes/month & single-product quotes)
+            $shopDomain = $request->header('X-Shop-Domain') ?? ($validated['shop_domain'] ?? null);
+            $shopRecord = $shopDomain ? ShopifyShop::where('shop_domain', $shopDomain)->first() : null;
+            $activePlan = strtolower($shopRecord->active_plan ?? 'free');
+            $isMultiItem = $request->has('items') && is_array($request->input('items')) && count($request->input('items')) > 1;
+
+            if ($activePlan === 'grow') {
+                if ($isMultiItem) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'UPGRADE_REQUIRED',
+                        'required_plan' => 'Advanced',
+                        'message' => 'Multi-item cart quotations require the Advanced plan or higher.'
+                    ], 403);
+                }
+
+                $monthlyCount = B2BQuote::where('shop_domain', $shopDomain)
+                    ->whereYear('created_at', now()->year)
+                    ->whereMonth('created_at', now()->month)
+                    ->count();
+
+                if ($monthlyCount >= 25) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'UPGRADE_REQUIRED',
+                        'required_plan' => 'Advanced',
+                        'message' => 'You have reached the Grow plan limit of 25 quotes per month. Upgrade to Advanced for unlimited quotes.'
+                    ], 403);
+                }
+            }
 
             // Calculate overall subtotal and prepare items data
             $subtotal = 0;
@@ -172,14 +229,48 @@ class B2BQuoteController extends Controller
 
             Log::info('New B2B quote submitted', ['quote_id' => $quote->id]);
 
-            // Trigger Shopify Flow Trigger event
-            try {
-                $shopDomain = $validated['shop_domain'] ?? null;
-                if ($shopDomain) {
-                    $this->triggerFlowQuoteSubmitted($quote, $shopDomain);
+            // Send notification emails if enabled
+            $resolvedShop = $shopDomain ?? ($validated['shop_domain'] ?? null);
+            if ($resolvedShop) {
+                $notifier = app(B2BNotificationService::class);
+                $staffEmail = $notifier->resolveStaffEmail($resolvedShop);
+                $formattedTotal = number_format((float) $quote->subtotal, 2);
+
+                $notifier->sendIfEnabled(
+                    $resolvedShop,
+                    'quote_submitted',
+                    $staffEmail,
+                    "New B2B Quote {$quote->quote_number} — {$quote->company_name}",
+                    "New Quote Request {$quote->quote_number}",
+                    [
+                        "Customer: {$quote->customer_name} ({$quote->customer_email})",
+                        "Company: {$quote->company_name}",
+                        "Products: {$quote->product_name}",
+                        "Proposed Total: \${$formattedTotal} USD",
+                    ]
+                );
+
+                $notifier->sendIfEnabled(
+                    $resolvedShop,
+                    'quote_auto_response',
+                    $quote->customer_email,
+                    "We Received Your Quote Request {$quote->quote_number}",
+                    "Quote Request {$quote->quote_number} Received",
+                    [
+                        "Hi {$quote->customer_name},",
+                        "Thank you for submitting your quote request for {$quote->product_name} (\${$formattedTotal} USD).",
+                        'Our wholesale team will review your request and send you a custom proposal shortly.',
+                    ]
+                );
+
+                // Trigger Shopify Flow Trigger event on Enterprise plan
+                if (in_array($activePlan, ['plus', 'enterprise'], true)) {
+                    try {
+                        $this->triggerFlowQuoteSubmitted($quote, $resolvedShop);
+                    } catch (Exception $flowEx) {
+                        Log::error('Shopify Flow quote trigger execution failed: ' . $flowEx->getMessage());
+                    }
                 }
-            } catch (Exception $flowEx) {
-                Log::error('Shopify Flow quote trigger execution failed: ' . $flowEx->getMessage());
             }
 
             return response()->json([
@@ -202,12 +293,89 @@ class B2BQuoteController extends Controller
     public function update(Request $request, $id): JsonResponse
     {
         try {
-            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
-            $query = B2BQuote::query();
-            if ($shop) {
-                $query->where('shop_domain', $shop);
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop') ?? $request->input('shop');
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
             }
-            $quote = $query->findOrFail($id);
+
+            $quote = B2BQuote::where('shop_domain', $shop)
+                ->where('id', $id)
+                ->firstOrFail();
+
+            $isAdmin = (bool) $request->attributes->get('shopify_admin_authenticated', false);
+
+            // Storefront (non-admin) requests are strictly limited to customer accept/reject on 'Sent' quotes
+            if (!$isAdmin) {
+                $customerEmail = strtolower(trim((string) $request->input('customer_email', '')));
+                if (!$customerEmail || $customerEmail !== strtolower(trim((string) $quote->customer_email))) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized: customer email does not match this quote.'
+                    ], 403);
+                }
+
+                $forbiddenFields = ['quoted_price', 'quantity', 'subtotal', 'items', 'apply_to_future_orders', 'expiration_date'];
+                foreach ($forbiddenFields as $field) {
+                    if ($request->has($field)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Unauthorized: pricing and line items can only be modified by store admins.'
+                        ], 403);
+                    }
+                }
+
+                // Enforce quote expiration before allowing buyer approval
+                if ($quote->expiration_date && $quote->expiration_date->isPast()) {
+                    $quote->update(['status' => 'Expired']);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This quote proposal has expired and can no longer be approved.'
+                    ], 422);
+                }
+
+                $requestedStatus = $request->input('status');
+                if ($quote->status !== 'Sent' || !in_array($requestedStatus, ['Approved', 'Rejected'], true)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only sent quotes can be approved or rejected by customers.'
+                    ], 422);
+                }
+
+                $oldStatus = $quote->status;
+                $quote->update(['status' => $requestedStatus]);
+                Log::info("B2B Quote {$requestedStatus} by customer on storefront: ID {$id}");
+
+                if ($requestedStatus === 'Approved' && $oldStatus !== 'Approved') {
+                    $this->createShopifyDraftOrder($quote);
+                }
+
+                // Notify merchant staff on buyer accept/reject
+                $notifier = app(B2BNotificationService::class);
+                $staffEmail = $notifier->resolveStaffEmail($shop);
+                $settingKey = $requestedStatus === 'Approved' ? 'quote_accepted' : 'quote_rejected';
+                $notifier->sendIfEnabled(
+                    $shop,
+                    $settingKey,
+                    $staffEmail,
+                    "Quote {$quote->quote_number} {$requestedStatus} by {$quote->customer_name}",
+                    "Quote {$quote->quote_number} Was {$requestedStatus}",
+                    [
+                        "Customer: {$quote->customer_name} ({$quote->customer_email})",
+                        "Company: {$quote->company_name}",
+                        "Total: \$" . number_format((float) $quote->subtotal, 2) . ' USD',
+                        $quote->invoice_url ? "Draft Order Checkout URL: {$quote->invoice_url}" : 'Log in to Shopify Admin to review the quote.',
+                    ]
+                );
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Quote updated successfully.',
+                    'data' => $quote->fresh()->load('items')
+                ]);
+            }
 
             $validated = $request->validate([
                 'quoted_price' => 'nullable|numeric',
@@ -285,14 +453,34 @@ class B2BQuoteController extends Controller
     {
         try {
             $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
-            $query = B2BQuote::query();
-            if ($shop) {
-                $query->where('shop_domain', $shop);
+            if (!$shop) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
             }
-            $quote = $query->findOrFail($id);
+
+            $quote = B2BQuote::where('shop_domain', $shop)
+                ->where('id', $id)
+                ->firstOrFail();
             $quote->update(['status' => 'Sent']);
 
             Log::info("B2B Quote Sent: ID {$id}");
+
+            // Notify buyer that pricing / proposal has been sent
+            app(B2BNotificationService::class)->sendIfEnabled(
+                $shop,
+                'quote_requoted',
+                $quote->customer_email,
+                "Your Custom Quote Proposal {$quote->quote_number} Is Ready",
+                "Quote Proposal {$quote->quote_number} Ready for Review",
+                [
+                    "Hi {$quote->customer_name},",
+                    "We have prepared custom pricing for your quote {$quote->quote_number} ({$quote->product_name}).",
+                    "Proposed Total: \$" . number_format((float) $quote->subtotal, 2) . ' USD',
+                    $quote->expiration_date ? "Valid Until: {$quote->expiration_date->format('Y-m-d')}" : 'Log in to your Quotations portal to approve or reject this proposal.',
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -313,7 +501,7 @@ class B2BQuoteController extends Controller
      */
     private function createShopifyDraftOrder(B2BQuote $quote): void
     {
-        $shopDomain = $quote->shop_domain ?? config('shopify.shop_domain');
+        $shopDomain = $quote->shop_domain ?: (config('app.env') === 'testing' ? config('shopify.shop_domain') : null);
         if (!$shopDomain) {
             Log::warning('No shop domain for quote, cannot create draft order');
             return;
@@ -432,8 +620,13 @@ class B2BQuoteController extends Controller
         if ($res['success']) {
             $draftOrderData = $res['data']['draftOrderCreate'] ?? null;
             if ($draftOrderData && empty($draftOrderData['userErrors'])) {
-                $draftOrderId = $draftOrderData['draftOrder']['id'];
-                Log::info("Shopify Draft Order created successfully: {$draftOrderId}");
+                $draftOrderId = $draftOrderData['draftOrder']['id'] ?? null;
+                $invoiceUrl = $draftOrderData['draftOrder']['invoiceUrl'] ?? null;
+                $quote->update([
+                    'draft_order_id' => $draftOrderId,
+                    'invoice_url' => $invoiceUrl,
+                ]);
+                Log::info("Shopify Draft Order created successfully: {$draftOrderId}", ['invoice_url' => $invoiceUrl]);
             } else {
                 $errors = json_encode($draftOrderData['userErrors'] ?? 'Unknown Shopify error');
                 Log::error("Shopify Draft Order creation failed: {$errors}");

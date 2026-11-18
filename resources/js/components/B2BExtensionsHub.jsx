@@ -15,7 +15,7 @@ import {
     TextField,
     Icon
 } from '@shopify/polaris';
-import { SearchIcon, FilterIcon } from '@shopify/polaris-icons';
+import { SearchIcon } from '@shopify/polaris-icons';
 
 const B2BRegistrationForm = lazy(() => import('./B2BRegistrationForm'));
 
@@ -66,21 +66,13 @@ export default function B2BExtensionsHub() {
         setSelectedTab(selectedTabIndex);
     };
 
-    const tabs = [
-        { id: 'all', content: 'All extensions (8)', panelID: 'all-content' },
-        { id: 'company-setup', content: 'Company setup (2)', panelID: 'company-setup-content' },
-        { id: 'ordering', content: 'Ordering (4)', panelID: 'ordering-content' },
-        { id: 'finance-credit', content: 'Finance & credit (2)', panelID: 'finance-credit-content' },
-        { id: 'active', content: 'Active (2)', panelID: 'active-content' }
-    ];
-
     const extensions = [
         {
             id: 'b2b-registration',
             title: 'B2B registration',
-            description: 'Manage registration form & review applications before creating B2B company account.',
+            description: 'Manage registration form & review applications before creating B2B company accounts.',
             status: 'Active',
-            isPlus: false,
+            tierLabel: 'Free',
             category: 'company-setup',
             colorGrad: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
             mockIcon: (
@@ -93,63 +85,26 @@ export default function B2BExtensionsHub() {
             )
         },
         {
-            id: 'credit-limit',
-            title: 'Credit limit',
-            description: 'Manage B2B credit accounts, track outstanding balances across your B2B clients.',
-            status: 'Inactive',
-            isPlus: true,
-            category: 'finance-credit',
-            colorGrad: 'linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%)',
+            id: 'quote-requests',
+            title: 'Quote requests',
+            description: 'Manage product & cart quote settings, review proposals, and auto-create Shopify draft orders.',
+            status: isQuoteActive ? 'Active' : 'Ready',
+            tierLabel: 'Grow+',
+            category: 'ordering',
+            colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',
             mockIcon: (
-                <div style={{ width: '26px', height: '16px', borderRadius: '3px', border: '1.5px solid #dc2626', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ width: '100%', height: '4px', backgroundColor: '#dc2626', marginTop: '2px' }} />
-                    <div style={{ width: '4px', height: '2px', backgroundColor: '#ef4444', position: 'absolute', bottom: '2px', left: '2px' }} />
-                </div>
-            )
-        },
-        {
-            id: 'finance-payment',
-            title: 'Finance & payment',
-            description: 'Let buyers view and manage financial record for their purchases, payments and financial ledger.',
-            status: 'Inactive',
-            isPlus: false,
-            category: 'finance-credit',
-            colorGrad: 'linear-gradient(135deg, #fef08a 0%, #fde047 100%)',
-            mockIcon: (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '20px', width: '20px' }}>
-                    <div style={{ width: '4px', height: '8px', backgroundColor: '#ca8a04', borderRadius: '1px' }} />
-                    <div style={{ width: '4px', height: '14px', backgroundColor: '#ca8a04', borderRadius: '1px' }} />
-                    <div style={{ width: '4px', height: '18px', backgroundColor: '#eab308', borderRadius: '1px' }} />
-                </div>
-            )
-        },
-        {
-            id: 'users-permissions',
-            title: 'Users & permissions',
-            description: 'Let buyers manage their own team members with roles & permissions.',
-            status: 'Inactive',
-            isPlus: true,
-            category: 'company-setup',
-            colorGrad: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
-            mockIcon: (
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a' }} />
-                        <div style={{ width: '12px', height: '6px', borderTopLeftRadius: '4px', borderTopRightRadius: '4px', backgroundColor: '#16a34a' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: 0.7 }}>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#15803d' }} />
-                        <div style={{ width: '10px', height: '5px', borderTopLeftRadius: '3px', borderTopRightRadius: '3px', backgroundColor: '#15803d' }} />
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                    <div style={{ width: '14px', height: '8px', border: '1.5px solid #455a64', borderRadius: '2px' }} />
+                    <div style={{ width: '8px', height: '2px', backgroundColor: '#455a64' }} />
                 </div>
             )
         },
         {
             id: 'quick-order-pad',
-            title: 'Quick order pad',
-            description: 'Provide B2B buyers with a quick grid format to enter SKU and quantities directly.',
-            status: 'Inactive',
-            isPlus: false,
+            title: 'Quick order pad, CSV bulk order & reorder',
+            description: 'SKU search grid, CSV bulk upload, and 1-click reorder storefront blocks for wholesale buyers.',
+            status: 'Active',
+            tierLabel: 'Grow+',
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
             mockIcon: (
@@ -162,57 +117,66 @@ export default function B2BExtensionsHub() {
             )
         },
         {
-            id: 'reorder-page',
-            title: 'Reorder page',
-            description: 'Enable B2B clients to reorder previously purchased items in a single click.',
-            status: 'Inactive',
-            isPlus: false,
-            category: 'ordering',
-            colorGrad: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)',
-            mockIcon: (
-                <div style={{ width: '22px', height: '22px', border: '2px solid #ea580c', borderRadius: '50%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: '0', height: '0', borderTop: '4px solid transparent', borderBottom: '4px solid transparent', borderLeft: '6px solid #ea580c', position: 'absolute', top: '-2px', right: '4px', transform: 'rotate(-30deg)' }} />
-                </div>
-            )
-        },
-        {
-            id: 'csv-upload-order',
-            title: 'CSV upload order',
-            description: 'Allows wholesale buyers to upload large order sheets via CSV for instant cart generation.',
-            status: 'Inactive',
-            isPlus: false,
+            id: 'shopping-lists',
+            title: 'Reusable shopping lists',
+            description: 'Let buyers save recurring requisition lists, submit for approval, and add all items to cart.',
+            status: 'Active',
+            tierLabel: 'Advanced+',
             category: 'ordering',
             colorGrad: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)',
             mockIcon: (
-                <div style={{ width: '18px', height: '20px', border: '2px solid #0d9488', borderRadius: '2px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#0d9488' }}>CSV</span>
+                <div style={{ width: '24px', height: '20px', border: '2px solid #0d9488', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '8px', fontWeight: 'bold', color: '#0d9488' }}>LIST</span>
                 </div>
             )
         },
         {
-            id: 'quote-requests',
-            title: 'Quote requests',
-            description: 'Manage your quote settings and review all quote submissions.',
-            status: isQuoteActive ? 'Active' : 'Inactive',
-            isPlus: false,
-            category: 'ordering',
-            colorGrad: 'linear-gradient(135deg, #eceff1 0%, #cfd8dc 100%)',
+            id: 'users-permissions',
+            title: 'Users & permissions',
+            description: 'Manage B2B company team members with Admin, Buyer, and Viewer roles.',
+            status: 'Active',
+            tierLabel: 'Enterprise',
+            category: 'company-setup',
+            colorGrad: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
             mockIcon: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
-                    <div style={{ width: '14px', height: '8px', border: '1.5px solid #455a64', borderRadius: '2px' }} />
-                    <div style={{ width: '8px', height: '2px', backgroundColor: '#455a64' }} />
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a' }} />
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#15803d', opacity: 0.7 }} />
+                </div>
+            )
+        },
+        {
+            id: 'credit-finance',
+            title: 'Credit limit & finance ledger',
+            description: 'Assign wholesale credit limits, Net terms, track balances, and record ledger payments.',
+            status: 'Active',
+            tierLabel: 'Enterprise',
+            category: 'finance-credit',
+            colorGrad: 'linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%)',
+            mockIcon: (
+                <div style={{ width: '26px', height: '16px', borderRadius: '3px', border: '1.5px solid #dc2626', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ width: '100%', height: '4px', backgroundColor: '#dc2626', marginTop: '2px' }} />
                 </div>
             )
         }
     ];
 
+    const activeCount = extensions.filter(e => e.status === 'Active').length;
+    const tabs = [
+        { id: 'all', content: `All extensions (${extensions.length})`, panelID: 'all-content' },
+        { id: 'company-setup', content: 'Company setup (2)', panelID: 'company-setup-content' },
+        { id: 'ordering', content: 'Ordering (3)', panelID: 'ordering-content' },
+        { id: 'finance-credit', content: 'Finance & credit (1)', panelID: 'finance-credit-content' },
+        { id: 'active', content: `Active (${activeCount})`, panelID: 'active-content' }
+    ];
+
     const filteredExtensions = extensions.filter(item => {
-        const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              item.description.toLowerCase().includes(searchQuery.toLowerCase());
-        
+        const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.description.toLowerCase().includes(searchQuery.toLowerCase());
+
         if (!matchesSearch) return false;
-        
-        if (selectedTab === 0) return true; // All
+
+        if (selectedTab === 0) return true;
         if (selectedTab === 1 && item.category === 'company-setup') return true;
         if (selectedTab === 2 && item.category === 'ordering') return true;
         if (selectedTab === 3 && item.category === 'finance-credit') return true;
@@ -265,7 +229,7 @@ export default function B2BExtensionsHub() {
                             <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} fitted={false} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
-                            <div style={{ width: '180px' }}>
+                            <div style={{ width: '200px' }}>
                                 <TextField
                                     value={searchQuery}
                                     onChange={(val) => setSearchQuery(val)}
@@ -276,19 +240,6 @@ export default function B2BExtensionsHub() {
                                     label="Search"
                                 />
                             </div>
-                            <div style={{
-                                width: '36px',
-                                height: '36px',
-                                border: '1px solid #c9cccf',
-                                borderRadius: '8px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                backgroundColor: 'white'
-                            }}>
-                                <Icon source={FilterIcon} />
-                            </div>
                         </div>
                     </div>
 
@@ -297,9 +248,9 @@ export default function B2BExtensionsHub() {
                         resourceName={{ singular: 'extension', plural: 'extensions' }}
                         items={filteredExtensions}
                         renderItem={(item) => {
-                            const { id, title, description, status, isPlus, mockIcon, colorGrad } = item;
+                            const { id, title, description, status, tierLabel, mockIcon, colorGrad } = item;
                             const isActive = status === 'Active';
-                            
+
                             return (
                                 <ResourceItem
                                     id={id}
@@ -311,6 +262,14 @@ export default function B2BExtensionsHub() {
                                             });
                                         } else if (id === 'quote-requests') {
                                             navigate('/quotes');
+                                        } else if (id === 'quick-order-pad') {
+                                            navigate('/ordering');
+                                        } else if (id === 'shopping-lists') {
+                                            navigate('/shopping-lists');
+                                        } else if (id === 'users-permissions') {
+                                            navigate('/team-members');
+                                        } else if (id === 'credit-finance') {
+                                            navigate('/credit-finance');
                                         }
                                     }}
                                 >
@@ -334,8 +293,8 @@ export default function B2BExtensionsHub() {
                                             <BlockStack gap="050">
                                                 <InlineStack align="start" blockAlign="center" gap="100">
                                                     <Text variant="headingSm" as="h3">{title}</Text>
-                                                    {isPlus && (
-                                                        <Badge tone="info" progress="complete">Plus</Badge>
+                                                    {tierLabel && (
+                                                        <Badge tone="info">{tierLabel}</Badge>
                                                     )}
                                                 </InlineStack>
                                                 <Text variant="bodyMd" tone="subdued">{description}</Text>

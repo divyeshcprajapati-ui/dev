@@ -26,7 +26,7 @@
     <div class="container">
         <a href="/" class="back-link">&larr; Back to B2B Hub</a>
         <h1>Privacy Policy</h1>
-        <div class="last-updated">Last Updated: {{ date('F d, Y') }}</div>
+        <div class="last-updated">Last Updated: November 18, 2026</div>
 
         <h2>1. Overview</h2>
         <p>B2B Hub ("we", "our", or "us") provides wholesale registration, quotation negotiation, and B2B customer management tools for merchants on the Shopify platform. This Privacy Policy describes how we collect, store, and process personal information when you install and use our Shopify application.</p>

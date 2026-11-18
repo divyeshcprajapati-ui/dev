@@ -299,6 +299,23 @@ export default function QuoteDetailAdmin() {
               </BlockStack>
             </Card>
 
+            {/* Draft Order Checkout Card (shown once approved & Draft Order exists) */}
+            {quote.invoice_url && (
+              <Card padding="400">
+                <BlockStack gap="300">
+                  <Text variant="headingMd" as="h2">Shopify Draft Order</Text>
+                  <Text variant="bodyMd" tone="subdued">
+                    Draft Order ID: {quote.draft_order_id || 'Created'}
+                  </Text>
+                  <InlineStack gap="200">
+                    <Button url={quote.invoice_url} target="_blank" variant="primary">
+                      Open Checkout Invoice
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            )}
+
             {/* Quote Price Application Card */}
             <Card padding="400">
               <BlockStack gap="300">

@@ -62,6 +62,17 @@ export const registrationService = {
     },
 
     /**
+     * Download the uploaded business verification document for a B2B application.
+     * @param {number|string} id
+     * @returns {Promise<Blob>}
+     */
+    downloadDocument: async (id) => {
+        return apiClient.get(`/b2b/applications/${id}/document`, {
+            responseType: 'blob'
+        });
+    },
+
+    /**
      * Approve a B2B application by ID.
      * @param {number|string} id
      * @returns {Promise<Object>}

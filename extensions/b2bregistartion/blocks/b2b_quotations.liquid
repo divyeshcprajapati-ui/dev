@@ -1,7 +1,8 @@
+{% render 'b2b_i18n_script' %}
 <div class="b2b-quotations-wrapper" style="max-width: 1200px; margin: 30px auto; padding: 0 15px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   {%- if customer -%}
     <div class="b2b-quotations-card" style="background: #fff; border: 1px solid #e1e3e5; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-      <h2 style="margin-top: 0; font-size: 24px; font-weight: 800; color: #1a1a1a;">My Quotations</h2>
+      <h2 id="b2b-quotes-heading" style="margin-top: 0; font-size: 24px; font-weight: 800; color: #1a1a1a;">My Quotations</h2>
 
       <!-- Navigation Tabs -->
       <div class="b2b-tabs-nav" style="display: flex; gap: 20px; border-bottom: 2px solid #f1f5f9; margin-bottom: 20px; overflow-x: auto; padding-bottom: 8px;">
@@ -9,7 +10,8 @@
         <button type="button" class="b2b-tab-btn" data-status="pending">Under review</button>
         <button type="button" class="b2b-tab-btn" data-status="sent">Pricing provided</button>
         <button type="button" class="b2b-tab-btn" data-status="approved">Accepted</button>
-        <button type="button" class="b2b-tab-btn" data-status="rejected">Reject</button>
+        <button type="button" class="b2b-tab-btn" data-status="rejected">Rejected</button>
+        <button type="button" class="b2b-tab-btn" data-status="expired">Expired</button>
         <button type="button" class="b2b-tab-btn" data-status="deal closed">Deal closed</button>
       </div>
 
@@ -45,16 +47,18 @@
         <div class="b2b-detail-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 30px;">
           <!-- Left side detail -->
           <div style="display: flex; flex-direction: column; gap: 20px;">
-            <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; display: flex; gap: 16px; align-items: center;">
-              <img id="detail-product-img" src="" alt="Product Image" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <div style="flex: 1;">
-                <h4 id="detail-product-name" style="margin: 0; font-size: 18px; font-weight: bold; color: #1a1a1a;"></h4>
-                <p id="detail-original-price" style="margin: 6px 0 0 0; font-size: 14px; color: #64748b;"></p>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-size: 14px; color: #475569;">Qty: <strong id="detail-qty" style="color: #1a1a1a;"></strong></div>
-                <div style="font-size: 14px; color: #475569; margin-top: 4px;">Proposed Price: <strong id="detail-proposed-price" style="color: #1a1a1a;"></strong></div>
-                <div style="font-size: 16px; fontWeight: bold; color: #1a1a1a; margin-top: 8px;">Subtotal: <strong id="detail-subtotal"></strong></div>
+            <div id="detail-items-container" style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; display: flex; gap: 16px; align-items: center;">
+                <img id="detail-product-img" src="" alt="Product Image" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <div style="flex: 1;">
+                  <h4 id="detail-product-name" style="margin: 0; font-size: 18px; font-weight: bold; color: #1a1a1a;"></h4>
+                  <p id="detail-original-price" style="margin: 6px 0 0 0; font-size: 14px; color: #64748b;"></p>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 14px; color: #475569;">Qty: <strong id="detail-qty" style="color: #1a1a1a;"></strong></div>
+                  <div style="font-size: 14px; color: #475569; margin-top: 4px;">Proposed Price: <strong id="detail-proposed-price" style="color: #1a1a1a;"></strong></div>
+                  <div style="font-size: 16px; font-weight: bold; color: #1a1a1a; margin-top: 8px;">Subtotal: <strong id="detail-subtotal"></strong></div>
+                </div>
               </div>
             </div>
             
@@ -113,16 +117,23 @@
 
 <script>
   (function() {
-    const API_BASE_URL = 'https://onshore-embezzle-skinny.ngrok-free.dev';
+    const API_BASE_URL = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
     const shopDomain = '{{ shop.permanent_domain }}';
     const customerEmail = '{{ customer.email }}';
+    const activeLocale = '{{ request.locale.iso_code }}';
+    let i18n = {};
 
     if (!customerEmail) return;
 
     let quotesData = [];
     let activeFilter = 'all';
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
+      if (window.B2B_I18N) {
+        i18n = await window.B2B_I18N.load(API_BASE_URL, shopDomain, activeLocale, 'quotation');
+        const headingEl = document.getElementById('b2b-quotes-heading');
+        if (headingEl && i18n.my_quotations) headingEl.textContent = i18n.my_quotations;
+      }
       const listBody = document.getElementById('b2b-quotes-list-body');
       const tableContainer = document.querySelector('.b2b-table-container');
       const detailSection = document.getElementById('b2b-quote-detail-section');
@@ -153,6 +164,7 @@
           if (activeFilter === 'sent') return q.status.toLowerCase() === 'sent';
           if (activeFilter === 'approved') return q.status.toLowerCase() === 'approved';
           if (activeFilter === 'rejected') return q.status.toLowerCase() === 'rejected';
+          if (activeFilter === 'expired') return q.status.toLowerCase() === 'expired';
           if (activeFilter === 'deal closed') return q.status.toLowerCase() === 'deal closed';
           return true;
         });
@@ -203,13 +215,37 @@
         tableContainer.style.display = 'none';
         detailSection.style.display = 'block';
 
-        // Load content
-        document.getElementById('detail-product-img').src = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png";
-        document.getElementById('detail-product-name').textContent = q.product_name;
-        document.getElementById('detail-original-price').textContent = `Original unit price: $${parseFloat(q.original_price).toFixed(2)} USD`;
-        document.getElementById('detail-qty').textContent = q.quantity;
-        document.getElementById('detail-proposed-price').textContent = `$${parseFloat(q.quoted_price).toFixed(2)} USD`;
-        document.getElementById('detail-subtotal').textContent = `$${parseFloat(q.subtotal).toFixed(2)} USD`;
+        // Load content (full multi-item breakdown when q.items exists)
+        const placeholderImg = "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png";
+        const itemsContainer = document.getElementById('detail-items-container');
+        const lineItems = (Array.isArray(q.items) && q.items.length > 0) ? q.items : [{
+          product_name: q.product_name,
+          original_price: q.original_price,
+          quoted_price: q.quoted_price,
+          quantity: q.quantity,
+          subtotal: q.subtotal,
+          image_url: q.image_url
+        }];
+
+        itemsContainer.innerHTML = lineItems.map(item => `
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; display: flex; gap: 16px; align-items: center;">
+            <img src="${item.image_url || placeholderImg}" alt="${item.product_name}" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div style="flex: 1;">
+              <h4 style="margin: 0; font-size: 16px; font-weight: bold; color: #1a1a1a;">${item.product_name}</h4>
+              <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">Original: $${parseFloat(item.original_price || 0).toFixed(2)} USD</p>
+            </div>
+            <div style="text-align: right; font-size: 13px; color: #475569;">
+              <div>Qty: <strong style="color: #1a1a1a;">${item.quantity}</strong></div>
+              <div style="margin-top: 2px;">Quoted: <strong style="color: #1a1a1a;">$${parseFloat(item.quoted_price || 0).toFixed(2)}</strong></div>
+              <div style="margin-top: 4px; font-weight: 700; color: #1a1a1a;">$${parseFloat(item.subtotal || (item.quoted_price * item.quantity) || 0).toFixed(2)} USD</div>
+            </div>
+          </div>
+        `).join('') + `
+          <div style="background: #f1f5f9; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: #1a1a1a;">
+            <span>Total Quote Subtotal</span>
+            <span>$${parseFloat(q.subtotal || 0).toFixed(2)} USD</span>
+          </div>
+        `;
         document.getElementById('detail-shipping-address').textContent = q.shipping_address;
 
         const badge = document.getElementById('detail-status-badge');
@@ -218,7 +254,7 @@
         let badgeColor = '#475569';
         if (q.status === 'Approved') { badgeBg = '#dcfce7'; badgeColor = '#166534'; }
         else if (q.status === 'Sent') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; }
-        else if (q.status === 'Rejected') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; }
+        else if (q.status === 'Rejected' || q.status === 'Expired') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; }
         badge.style.backgroundColor = badgeBg;
         badge.style.color = badgeColor;
 
@@ -235,38 +271,67 @@
         actionWrapper.innerHTML = '';
         if (q.status === 'Sent') {
           actionWrapper.innerHTML = `
-            <button id="btn-approve" style="padding: 12px; background: #008060; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">Approve Proposal</button>
-            <button id="btn-reject" style="padding: 12px; background: #ea580c; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">Reject Proposal</button>
+            <button id="btn-approve" style="padding: 12px; background: #008060; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">${i18n.approve_proposal || 'Approve Proposal'}</button>
+            <button id="btn-reject" style="padding: 12px; background: #ea580c; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;">${i18n.reject_proposal || 'Reject Proposal'}</button>
           `;
 
           document.getElementById('btn-approve').addEventListener('click', () => updateStatus(q.id, 'Approved'));
           document.getElementById('btn-reject').addEventListener('click', () => updateStatus(q.id, 'Rejected'));
+        } else if (q.status === 'Approved' && q.invoice_url) {
+          actionWrapper.innerHTML = `
+            <a href="${q.invoice_url}" target="_blank" rel="noopener noreferrer" style="display: block; text-align: center; padding: 12px; background: #008060; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; width: 100%; box-sizing: border-box;">${i18n.proceed_to_checkout || 'Proceed to Checkout'} &rarr;</a>
+          `;
+        } else if (q.status === 'Expired') {
+          actionWrapper.innerHTML = `
+            <div style="padding: 10px 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; text-align: center; font-weight: 600;">This proposal has expired. Please request a new quote.</div>
+          `;
         }
+      }
+
+      function showInlineStatus(message, isError = false) {
+        let banner = document.getElementById('b2b-quote-inline-status');
+        if (!banner) {
+          banner = document.createElement('div');
+          banner.id = 'b2b-quote-inline-status';
+          banner.style.cssText = 'padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;font-weight:600;';
+          const card = document.querySelector('.b2b-quotations-card');
+          if (card) card.insertBefore(banner, card.children[1] || null);
+        }
+        banner.style.backgroundColor = isError ? '#fee2e2' : '#dcfce7';
+        banner.style.color = isError ? '#991b1b' : '#166534';
+        banner.textContent = message;
+        banner.style.display = 'block';
+        setTimeout(() => { banner.style.display = 'none'; }, 4000);
       }
 
       async function updateStatus(id, newStatus) {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/b2b/quotes/${id}/update`, {
+          const res = await fetch(`${API_BASE_URL}/api/b2b/quotes/${id}/update?shop=${encodeURIComponent(shopDomain)}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'X-Shop-Domain': shopDomain,
               'ngrok-skip-browser-warning': 'true'
             },
-            body: JSON.stringify({ status: newStatus })
+            body: JSON.stringify({
+              status: newStatus,
+              shop: shopDomain,
+              customer_email: customerEmail
+            })
           });
           const result = await res.json();
-          if (result.success) {
-            alert(`Quote status updated to: ${newStatus}`);
+          if (res.ok && result.success) {
+            showInlineStatus(`Quote status updated to: ${newStatus}`, false);
             fetchQuotes();
             // Go back
             detailSection.style.display = 'none';
             tableContainer.style.display = 'block';
           } else {
-            alert('Failed to update quote status.');
+            showInlineStatus(result.message || 'Failed to update quote status.', true);
           }
         } catch (e) {
           console.error(e);
-          alert('An error occurred during submission.');
+          showInlineStatus('An error occurred while updating the quote.', true);
         }
       }
 
@@ -294,6 +359,8 @@
 {
   "name": "B2B Quotations Portal",
   "target": "section",
-  "settings": []
+  "settings": [
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
+  ]
 }
 {% endschema %}

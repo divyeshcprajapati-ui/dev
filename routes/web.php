@@ -30,6 +30,7 @@ Route::get('/billing/shopify/callback', [ShopifyBillingController::class, 'billi
 
 // Shopify Webhooks
 Route::post('/webhooks/shopify/app-uninstalled', [ShopifyAuthController::class, 'webhookUninstalled'])->name('shopify.webhook.uninstalled');
+Route::post('/webhooks/shopify/app-subscriptions-update', [ShopifyWebhookController::class, 'handleAppSubscriptionUpdate'])->name('shopify.webhook.app_subscriptions_update');
 Route::post('/webhooks/shopify/company-created', [ShopifyWebhookController::class, 'handleCompanyCreated'])->name('shopify.webhook.company_created');
 Route::post('/webhooks/shopify/quote-updated', [ShopifyWebhookController::class, 'handleQuoteUpdated'])->name('shopify.webhook.quote_updated');
 

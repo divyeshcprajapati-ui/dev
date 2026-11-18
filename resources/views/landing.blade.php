@@ -630,11 +630,11 @@
                     <div class="plan-desc">Perfect for growing wholesale stores with quote requests.</div>
                     <ul class="plan-features">
                         <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Everything in Free</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Multi-step Registration Forms</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Basic Quotation Module</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Smart GSTIN / Tax Verification</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Product Quotations (up to 25/month)</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Quick Order Pad &amp; CSV Bulk Upload</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> 1-Click Past Order Reorder</li>
                     </ul>
-                    <a href="#install" class="btn btn-secondary">Start Trial</a>
+                    <a href="#install" class="btn btn-secondary">Get Started</a>
                 </div>
 
                 <!-- Advanced Plan -->
@@ -645,32 +645,32 @@
                         <span class="amount">$79</span>
                         <span class="period">/ month</span>
                     </div>
-                    <div class="plan-desc">Full quotation negotiation engine & company management.</div>
+                    <div class="plan-desc">Full quotation negotiation engine, shopping lists &amp; translations.</div>
                     <ul class="plan-features">
                         <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Everything in Grow</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Multi-Item Quote Negotiations</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Custom Expiration & Re-Quoting</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Company Location Tagging</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Priority Support</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Unlimited Multi-Item Cart Quotes</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Custom Expiration &amp; Draft Order Checkout</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Reusable Shopping Lists &amp; Approvals</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Multi-Language Storefront Translations</li>
                     </ul>
-                    <a href="#install" class="btn btn-primary">Start Trial</a>
+                    <a href="#install" class="btn btn-primary">Get Started</a>
                 </div>
 
-                <!-- Plus Plan -->
+                <!-- Enterprise Plan -->
                 <div class="pricing-card">
-                    <div class="plan-name">Shopify Plus</div>
+                    <div class="plan-name">Enterprise</div>
                     <div class="plan-price">
                         <span class="amount">$149</span>
                         <span class="period">/ month</span>
                     </div>
-                    <div class="plan-desc">Enterprise-scale automation and dedicated customization.</div>
+                    <div class="plan-desc">Enterprise-scale wholesale automation, team roles &amp; credit ledger.</div>
                     <ul class="plan-features">
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Unlimited Everything</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Everything in Advanced</li>
                         <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Shopify Flow Automations</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Native Company API Sync</li>
-                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Dedicated Account Manager</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Users &amp; Permissions (Team Roles)</li>
+                        <li><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Credit Limit &amp; Finance Ledger Portal</li>
                     </ul>
-                    <a href="#install" class="btn btn-secondary">Contact Us</a>
+                    <a href="#install" class="btn btn-secondary">Get Started</a>
                 </div>
             </div>
         </div>
@@ -687,7 +687,7 @@
             <div class="faq-grid">
                 <div class="faq-item">
                     <h4>Do I need Shopify Plus to use B2B Hub?</h4>
-                    <p>No! B2B Hub works on all Shopify plans (Basic, Shopify, Advanced, and Plus). You can onboard wholesale accounts and negotiate quotes on any tier.</p>
+                    <p>You can collect B2B registrations and manage wholesale quote requests on any Shopify plan. Native Shopify B2B Company &amp; Location syncing requires a store with Shopify B2B (Shopify Plus) enabled.</p>
                 </div>
                 <div class="faq-item">
                     <h4>How does customer registration work?</h4>

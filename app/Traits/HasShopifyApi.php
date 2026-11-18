@@ -70,18 +70,18 @@ trait HasShopifyApi
      */
     protected function getAccessToken(?string $shopDomain): string
     {
-        if (!$shopDomain) {
-            return config('shopify.access_token') ?? '';
-        }
-
         // In testing environment with configured token, use config directly
         if (config('app.env') === 'testing' && config('shopify.access_token')) {
             return config('shopify.access_token');
         }
 
+        if (!$shopDomain) {
+            return '';
+        }
+
         $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
-        if (!$shop) {
-            return config('shopify.access_token') ?? '';
+        if (!$shop || !$shop->access_token) {
+            return '';
         }
 
         // Check if token has expired or is about to expire within 5 minutes
@@ -90,7 +90,7 @@ trait HasShopifyApi
             $this->refreshShopifyAccessToken($shop);
         }
 
-        return $shop->access_token;
+        return (string) $shop->access_token;
     }
 
     /**
@@ -203,38 +203,6 @@ trait HasShopifyApi
             return null;
         }
     }
-
-    /**
-     * Register app/uninstalled webhook dynamically for the shop.
-     */
-    protected function registerUninstallWebhook(string $shop, string $accessToken): void
-    {
-        $apiVersion = config('shopify.api_version', '2026-04');
-        $webhookUrl = "https://{$shop}/admin/api/{$apiVersion}/webhooks.json";
-        $callbackUrl = route('shopify.webhook.uninstalled');
-
-        try {
-            $response = Http::withHeaders([
-                'X-Shopify-Access-Token' => $accessToken,
-                'Content-Type' => 'application/json',
-            ])->post($webhookUrl, [
-                'webhook' => [
-                    'topic' => 'app/uninstalled',
-                    'address' => $callbackUrl,
-                    'format' => 'json'
-                ]
-            ]);
-
-            if ($response->failed()) {
-                Log::warning("Failed to register uninstall webhook for {$shop}: " . $response->body());
-            } else {
-                Log::info("Successfully registered uninstall webhook for {$shop}");
-            }
-        } catch (Exception $e) {
-            Log::error("Webhook registration exception for {$shop}: " . $e->getMessage());
-        }
-    }
-
 
     /**
      * Search for customer GID by email.

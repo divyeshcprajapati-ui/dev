@@ -82,7 +82,8 @@ class TriggerB2BRegistrationFlow implements ShouldQueue
         }
 
         $shopName = explode('.', $shopDomain)[0];
-        $appLink  = "https://admin.shopify.com/store/{$shopName}/apps/b2bdev/customers/{$application->id}";
+        $appHandle = config('shopify.app_handle', 'b2bdev');
+        $appLink  = "https://admin.shopify.com/store/{$shopName}/apps/{$appHandle}/customers/{$application->id}";
 
         $payload = [
             'Your field key'   => "New B2B registration submitted by: {$application->first_name} {$application->last_name} ({$application->company_name})",

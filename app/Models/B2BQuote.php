@@ -29,6 +29,8 @@ class B2BQuote extends Model
         'shipping_address',
         'billing_address',
         'image_url',
+        'draft_order_id',
+        'invoice_url',
     ];
 
     protected $casts = [

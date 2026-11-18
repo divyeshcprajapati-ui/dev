@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Page,
   Card,
@@ -7,80 +7,199 @@ import {
   BlockStack,
   InlineStack,
   Box,
+  TextField,
+  Select,
+  Banner,
+  Badge,
   Divider,
-  Icon
 } from '@shopify/polaris';
+import { useNavigate } from 'react-router-dom';
+import { b2bSuiteService } from '../services/b2bSuiteService';
+
+const SUPPORTED_LOCALES = [
+  { label: 'French (fr)', value: 'fr' },
+  { label: 'German (de)', value: 'de' },
+  { label: 'Spanish (es)', value: 'es' },
+  { label: 'Italian (it)', value: 'it' },
+  { label: 'Dutch (nl)', value: 'nl' },
+  { label: 'Portuguese (pt)', value: 'pt' },
+  { label: 'Hindi (hi)', value: 'hi' },
+  { label: 'Japanese (ja)', value: 'ja' },
+  { label: 'Chinese (zh)', value: 'zh' },
+];
+
+const SECTIONS = [
+  { id: 'registration', label: 'Registration form' },
+  { id: 'quotation', label: 'Quotation' },
+  { id: 'bulk', label: 'Quick order pad' },
+  { id: 'csv', label: 'CSV Upload' },
+  { id: 'list', label: 'Shopping list' },
+  { id: 'members', label: 'Members & roles' },
+];
 
 export default function Translations() {
-  const [activeSubTab, setActiveSubTab] = useState('registration');
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locales, setLocales] = useState([]);
+  const [defaults, setDefaults] = useState({});
+  const [translations, setTranslations] = useState({});
+  const [activeLocale, setActiveLocale] = useState('');
+  const [newLocale, setNewLocale] = useState('fr');
+  const [activeSection, setActiveSection] = useState('registration');
+  const [draftValues, setDraftValues] = useState({});
+  const [notice, setNotice] = useState(null);
 
-  const subTabs = [
-    { id: 'registration', label: 'Registration form' },
-    { id: 'csv', label: 'CSV Upload' },
-    { id: 'bulk', label: 'Bulk add SKUs' },
-    { id: 'members', label: 'Members and roles' },
-    { id: 'list', label: 'Shopping list' },
-    { id: 'quotation', label: 'Quotation' },
-    { id: 'more', label: 'More views ▾' }
-  ];
+  const loadData = async (preferredLocale = null) => {
+    setLoading(true);
+    try {
+      const res = await b2bSuiteService.getTranslations();
+      if (res?.success && res.data) {
+        const fetchedLocales = res.data.locales || [];
+        setLocales(fetchedLocales);
+        setDefaults(res.data.defaults || {});
+        setTranslations(res.data.translations || {});
+        const targetLocale = preferredLocale || activeLocale || fetchedLocales[0] || '';
+        setActiveLocale(targetLocale);
+      }
+    } catch (err) {
+      setNotice({ tone: 'critical', message: err.message || 'Failed to load translations.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!activeLocale) return;
+    const sectionDefaults = defaults[activeSection] || {};
+    const existing = translations?.[activeLocale]?.[activeSection] || {};
+    const next = {};
+    Object.keys(sectionDefaults).forEach((k) => {
+      next[k] = existing[k] ?? '';
+    });
+    setDraftValues(next);
+  }, [activeLocale, activeSection, defaults, translations]);
+
+  const handleAddLocale = () => {
+    if (!locales.includes(newLocale)) {
+      setLocales((prev) => [...prev, newLocale]);
+    }
+    setActiveLocale(newLocale);
+    setNotice({ tone: 'info', message: `Editing locale "${newLocale.toUpperCase()}". Enter your translations below and click Save.` });
+  };
+
+  const handleSave = async () => {
+    if (!activeLocale) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const res = await b2bSuiteService.saveTranslations({
+        locale: activeLocale,
+        section: activeSection,
+        entries: draftValues,
+      });
+      if (res?.success) {
+        setNotice({ tone: 'success', message: res.message || 'Translations saved.' });
+        await loadData(activeLocale);
+      }
+    } catch (err) {
+      setNotice({
+        tone: err?.status === 403 ? 'warning' : 'critical',
+        message: err?.message || 'Failed to save translations.',
+        requiresUpgrade: err?.status === 403,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteLocale = async () => {
+    if (!activeLocale) return;
+    setSaving(true);
+    try {
+      await b2bSuiteService.deleteLocale(activeLocale);
+      setNotice({ tone: 'success', message: `Removed locale "${activeLocale.toUpperCase()}".` });
+      setActiveLocale('');
+      await loadData('');
+    } catch (err) {
+      setNotice({ tone: 'critical', message: err?.message || 'Failed to delete locale.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sectionDefaults = defaults[activeSection] || {};
 
   return (
-    <Page title="Content & Translation">
+    <Page
+      title="Content & Translation"
+      subtitle="Translate storefront B2B forms, quotation labels, and buyer portals for international markets."
+      primaryAction={activeLocale ? { content: 'Save translations', onAction: handleSave, loading: saving } : undefined}
+    >
       <BlockStack gap="400">
-        {/* Top Market Row */}
+        {notice && (
+          <Banner
+            tone={notice.tone}
+            onDismiss={() => setNotice(null)}
+            action={notice.requiresUpgrade ? { content: 'Upgrade Plan', onAction: () => navigate('/pricing') } : undefined}
+          >
+            <p>{notice.message}</p>
+          </Banner>
+        )}
+
         <Card padding="400">
-          <InlineStack align="start" blockAlign="center" gap="300">
-            <InlineStack gap="100" blockAlign="center">
+          <InlineStack align="space-between" blockAlign="center" wrap gap="300">
+            <InlineStack gap="200" blockAlign="center">
               <Text variant="headingSm" as="span">English</Text>
-              <span style={{
-                fontSize: '11px',
-                background: '#e4e6e7',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                fontWeight: '500',
-                color: '#4a4a4a'
-              }}>Default</span>
+              <Badge>Default</Badge>
+              <Text as="span" tone="subdued">→</Text>
+              {locales.length > 0 ? (
+                <div style={{ minWidth: '180px' }}>
+                  <Select
+                    label="Target language"
+                    labelHidden
+                    options={locales.map((loc) => ({ label: loc.toUpperCase(), value: loc }))}
+                    value={activeLocale}
+                    onChange={setActiveLocale}
+                  />
+                </div>
+              ) : (
+                <Badge tone="attention">No target language yet</Badge>
+              )}
             </InlineStack>
 
-            <span style={{ color: '#8c9196', fontSize: '16px' }}>➔</span>
-
-            <div style={{
-              background: '#f6f6f7',
-              border: '1px solid #d2d5d8',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: '#6d7175',
-              cursor: 'pointer'
-            }}>
-              <span>No locale found</span>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '16px', height: '16px' }}>
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </div>
+            <InlineStack gap="200" blockAlign="center">
+              <div style={{ minWidth: '170px' }}>
+                <Select
+                  label="Add language"
+                  labelHidden
+                  options={SUPPORTED_LOCALES}
+                  value={newLocale}
+                  onChange={setNewLocale}
+                />
+              </div>
+              <Button variant="primary" onClick={handleAddLocale}>Add language</Button>
+              {activeLocale && (
+                <Button tone="critical" onClick={handleDeleteLocale} disabled={saving}>Remove</Button>
+              )}
+            </InlineStack>
           </InlineStack>
         </Card>
 
-        {/* Translation Inner Navigation & Main Workspace */}
-        <Card padding="600">
-          <BlockStack gap="500">
-            {/* Horizontal Sub-Tabs */}
-            <div style={{
-              display: 'flex',
-              gap: '24px',
-              borderBottom: '1px solid #e1e3e5',
-              paddingBottom: '8px',
-              overflowX: 'auto'
-            }}>
-              {subTabs.map(tab => {
-                const isActive = activeSubTab === tab.id;
+        <Card padding="500">
+          <BlockStack gap="400">
+            <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid #e1e3e5', paddingBottom: '8px', overflowX: 'auto' }}>
+              {SECTIONS.map((sec) => {
+                const isActive = activeSection === sec.id;
                 return (
                   <button
-                    key={tab.id}
-                    onClick={() => setActiveSubTab(tab.id)}
+                    key={sec.id}
+                    type="button"
+                    onClick={() => setActiveSection(sec.id)}
                     style={{
                       border: 'none',
                       background: 'none',
@@ -88,152 +207,55 @@ export default function Translations() {
                       cursor: 'pointer',
                       fontSize: '14px',
                       color: isActive ? '#008060' : '#6d7175',
-                      fontWeight: isActive ? '600' : '400',
+                      fontWeight: isActive ? 600 : 400,
                       borderBottom: isActive ? '2px solid #008060' : '2px solid transparent',
-                      transition: 'all 0.2s ease',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    {tab.label}
+                    {sec.label}
                   </button>
                 );
               })}
             </div>
 
-            {/* Centered Empty State illustration & CTA */}
-            <Box paddingY="1200" style={{ textAlign: 'center' }}>
-              <BlockStack gap="500" align="center">
-                
-                {/* SVG Illustration resembling the screenshot */}
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                  <div style={{
-                    width: '160px',
-                    height: '160px',
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {/* Background decoration circles */}
-                    <div style={{
-                      position: 'absolute',
-                      width: '140px',
-                      height: '140px',
-                      borderRadius: '50%',
-                      background: '#f1f8f5',
-                      zIndex: 1
-                    }} />
-                    <div style={{
-                      position: 'absolute',
-                      width: '90px',
-                      height: '90px',
-                      borderRadius: '50%',
-                      border: '2px dashed #a3e0c7',
-                      zIndex: 2,
-                      animation: 'spin 40s linear infinite'
-                    }} />
-                    
-                    {/* Center Arrows */}
-                    <div style={{
-                      zIndex: 4,
-                      background: '#008060',
-                      color: '#ffffff',
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 4px 10px rgba(0, 128, 96, 0.3)'
-                    }}>
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: '22px', height: '22px' }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
-                    </div>
-
-                    {/* Left Card Placeholder */}
-                    <div style={{
-                      position: 'absolute',
-                      left: '10px',
-                      top: '40px',
-                      width: '48px',
-                      height: '52px',
-                      background: '#ffffff',
-                      border: '1px solid #d2d5d8',
-                      borderRadius: '6px',
-                      zIndex: 3,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                      padding: '6px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div style={{ width: '100%', height: '3px', background: '#e1e3e5' }} />
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#8c9196' }}>A</div>
-                      <div style={{
-                        fontSize: '9px',
-                        background: '#f6f6f7',
-                        padding: '1px 4px',
-                        borderRadius: '3px',
-                        color: '#6d7175'
-                      }}>6</div>
-                    </div>
-
-                    {/* Right Card Placeholder */}
-                    <div style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '40px',
-                      width: '48px',
-                      height: '52px',
-                      background: '#ffffff',
-                      border: '1px solid #d2d5d8',
-                      borderRadius: '6px',
-                      zIndex: 3,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                      padding: '6px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div style={{ width: '100%', height: '3px', background: '#008060' }} />
-                      <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#008060' }}>文</div>
-                      <div style={{
-                        fontSize: '9px',
-                        background: '#f1f8f5',
-                        padding: '1px 4px',
-                        borderRadius: '3px',
-                        color: '#008060'
-                      }}>4</div>
-                    </div>
-                  </div>
-                </div>
-
-                <BlockStack gap="200">
-                  <Text variant="headingMd" as="h3">
-                    Translate and manage content for each market
-                  </Text>
+            {loading ? (
+              <Box padding="600"><Text alignment="center" tone="subdued">Loading translations...</Text></Box>
+            ) : !activeLocale ? (
+              <Box padding="800">
+                <BlockStack gap="300" inlineAlign="center">
+                  <Text variant="headingMd" as="h3">Select a language above to start translating</Text>
                   <Text variant="bodyMd" tone="subdued">
-                    Manage language translation, custom content for each market.
+                    Storefront B2B blocks automatically fetch your saved translations via /api/b2b/translations.
                   </Text>
+                  <Button variant="primary" onClick={handleAddLocale}>Add {newLocale.toUpperCase()} Language</Button>
                 </BlockStack>
-
-                <Box marginTop="200">
-                  <Button variant="primary" size="large">Add language</Button>
-                </Box>
+              </Box>
+            ) : (
+              <BlockStack gap="400">
+                {Object.entries(sectionDefaults).map(([key, defaultText], idx) => (
+                  <div key={key}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+                      <BlockStack gap="100">
+                        <Text variant="bodySm" fontWeight="semibold">{key}</Text>
+                        <Text variant="bodyMd" tone="subdued">{defaultText}</Text>
+                      </BlockStack>
+                      <TextField
+                        label={`Translation for ${key}`}
+                        labelHidden
+                        value={draftValues[key] || ''}
+                        placeholder={defaultText}
+                        onChange={(val) => setDraftValues((prev) => ({ ...prev, [key]: val }))}
+                        autoComplete="off"
+                      />
+                    </div>
+                    {idx < Object.keys(sectionDefaults).length - 1 && <Box paddingBlockStart="300"><Divider /></Box>}
+                  </div>
+                ))}
               </BlockStack>
-            </Box>
+            )}
           </BlockStack>
         </Card>
       </BlockStack>
-      
-      <style>{`
-        @keyframes spin {
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </Page>
   );
 }

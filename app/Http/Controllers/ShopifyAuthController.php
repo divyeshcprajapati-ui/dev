@@ -22,7 +22,7 @@ class ShopifyAuthController extends Controller
         }
 
         $apiKey = config('shopify.api_key');
-        $scopes = 'read_customers,write_customers,read_companies,write_companies';
+        $scopes = 'read_customers,write_customers,read_companies,write_companies,write_draft_orders,read_products';
         $redirectUri = route('shopify.auth.callback');
         
         // Generate random state/nonce and save to session
@@ -99,10 +99,8 @@ class ShopifyAuthController extends Controller
 
             Log::info("Shopify App successfully installed / updated for: {$shop} (Expiring Token Enabled)");
 
-            // 5. Register uninstalled webhook automatically
-            $this->registerUninstallWebhook($shop, $accessToken);
-
-            // 6. Redirect back to Shopify Admin app dashboard
+            // 5. Redirect back to Shopify Admin app dashboard
+            // (app/uninstalled & compliance webhooks are declaratively managed via shopify.app.toml)
             $apiKey = config('shopify.api_key');
             return redirect("https://{$shop}/admin/apps/{$apiKey}");
 
@@ -120,6 +118,11 @@ class ShopifyAuthController extends Controller
         $hmac = $request->header('x-shopify-hmac-sha256');
         $data = $request->getContent();
         $apiSecret = config('shopify.api_secret');
+
+        if (!$hmac || !$apiSecret) {
+            Log::warning('Shopify uninstalled webhook missing HMAC header or API secret.');
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
         $calculatedHmac = base64_encode(hash_hmac('sha256', $data, $apiSecret, true));
         if (!hash_equals($calculatedHmac, $hmac)) {
@@ -162,36 +165,5 @@ class ShopifyAuthController extends Controller
         $calculatedHmac = hash_hmac('sha256', $queryString, $secret);
 
         return hash_equals($calculatedHmac, $hmac);
-    }
-
-    /**
-     * Register app/uninstalled webhook dynamically for the shop.
-     */
-    private function registerUninstallWebhook(string $shop, string $accessToken): void
-    {
-        $apiVersion = config('shopify.api_version', '2026-04');
-        $webhookUrl = "https://{$shop}/admin/api/{$apiVersion}/webhooks.json";
-        $callbackUrl = route('shopify.webhook.uninstalled');
-
-        try {
-            $response = Http::withHeaders([
-                'X-Shopify-Access-Token' => $accessToken,
-                'Content-Type' => 'application/json',
-            ])->post($webhookUrl, [
-                'webhook' => [
-                    'topic' => 'app/uninstalled',
-                    'address' => $callbackUrl,
-                    'format' => 'json'
-                ]
-            ]);
-
-            if ($response->failed()) {
-                Log::warning("Failed to register uninstall webhook for {$shop}: " . $response->body());
-            } else {
-                Log::info("Successfully registered uninstall webhook for {$shop}");
-            }
-        } catch (\Exception $e) {
-            Log::error("Webhook registration exception for {$shop}: " . $e->getMessage());
-        }
     }
 }

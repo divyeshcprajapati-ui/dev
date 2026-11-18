@@ -44,6 +44,7 @@ export default function QuoteSettings() {
   const [formSelector, setFormSelector] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   // Quote Requests State
   const [quotes, setQuotes] = useState([]);
@@ -93,6 +94,7 @@ export default function QuoteSettings() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       await quoteService.updateSettings({
         productPage: productPage,
@@ -103,10 +105,16 @@ export default function QuoteSettings() {
         addToCartSelector: addToCartSelector,
         formSelector: formSelector
       });
-      shopify.toast.show('Settings saved');
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show('Settings saved');
+      }
     } catch (err) {
       console.error("Failed to save settings", err);
-      alert("Settings saved locally (API error)");
+      const isUpgradeRequired = err?.status === 403;
+      setSaveError({
+        message: err?.message || 'Failed to save quote settings. Please try again.',
+        requiresUpgrade: isUpgradeRequired
+      });
     } finally {
       setSaving(false);
     }
@@ -166,6 +174,16 @@ export default function QuoteSettings() {
       } : undefined}
     >
       <BlockStack gap="400">
+        {saveError && (
+          <Banner
+            tone={saveError.requiresUpgrade ? 'warning' : 'critical'}
+            title={saveError.requiresUpgrade ? 'Paid plan required' : 'Could not save settings'}
+            action={saveError.requiresUpgrade ? { content: 'View Pricing Plans', onAction: () => navigate('/pricing') } : undefined}
+            onDismiss={() => setSaveError(null)}
+          >
+            <p>{saveError.message}</p>
+          </Banner>
+        )}
         <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange} />
 
         {selectedTab === 0 ? (

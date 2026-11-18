@@ -18,28 +18,12 @@ class B2BSubscriptionSeeder extends Seeder
         B2BSubscription::truncate();
 
         $modules = [
-            // Free plan modules
-            [
-                'subscription_key' => 'manageAccounts',
-                'name' => 'Create & manage B2B company accounts',
-                'price' => 0.00,
-                'description' => 'Create & manage B2B company accounts',
-                'plan_type' => 'free',
-                'is_default' => true,
-            ],
-            [
-                'subscription_key' => 'teamRoles',
-                'name' => 'Buyer team roles & permission control',
-                'price' => 0.00,
-                'description' => 'Buyer team roles & permission control',
-                'plan_type' => 'free',
-                'is_default' => true,
-            ],
+            // Free plan modules (all implemented features)
             [
                 'subscription_key' => 'signupForm',
                 'name' => 'Custom B2B sign-up registration form',
                 'price' => 0.00,
-                'description' => 'Custom B2B sign-up registration form',
+                'description' => 'Customizable B2B wholesale registration form block',
                 'plan_type' => 'free',
                 'is_default' => true,
             ],
@@ -47,111 +31,47 @@ class B2BSubscriptionSeeder extends Seeder
                 'subscription_key' => 'reviewApps',
                 'name' => 'Review & approve buyer applications',
                 'price' => 0.00,
-                'description' => 'Review & approve buyer applications',
+                'description' => 'Review, approve, or reject wholesale registration submissions',
+                'plan_type' => 'free',
+                'is_default' => true,
+            ],
+            [
+                'subscription_key' => 'manageAccounts',
+                'name' => 'Shopify B2B company & metafield sync',
+                'price' => 0.00,
+                'description' => 'Sync approved applicants to Shopify Companies and Locations',
                 'plan_type' => 'free',
                 'is_default' => true,
             ],
 
-            // Grow plan modules
+            // Grow plan modules ($29/mo)
             [
                 'subscription_key' => 'quoteGrow',
-                'name' => 'B2B quote request & negotiation',
-                'price' => 19.00,
-                'description' => 'Quote request and price negotiations',
-                'plan_type' => 'grow',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'orderGrow',
-                'name' => 'Quick bulk order via CSV & SKU',
+                'name' => 'Product Quotes (up to 25/mo) + Quick Order, CSV & Reorder',
                 'price' => 29.00,
-                'description' => 'Support buyers order and re-order quickly',
+                'description' => 'Product page quote requests (25/month), Quick Order Pad, CSV Bulk Order, and 1-Click Reorder',
                 'plan_type' => 'grow',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'listGrow',
-                'name' => 'Reusable B2B shopping lists',
-                'price' => 49.00,
-                'description' => 'Manage B2B shopping lists',
-                'plan_type' => 'grow',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'financeGrow',
-                'name' => 'B2B finance, credit & ledger',
-                'price' => 69.00,
-                'description' => 'Manage B2B credit accounts',
-                'plan_type' => 'grow',
-                'is_default' => false,
+                'is_default' => true,
             ],
 
-            // Advanced plan modules
+            // Advanced plan modules ($79/mo)
             [
                 'subscription_key' => 'quoteAdv',
-                'name' => 'B2B quote request & negotiation',
-                'price' => 39.00,
-                'description' => 'Quote request and price negotiations',
+                'name' => 'Unlimited Multi-Item Quotes + Shopping Lists + Translations',
+                'price' => 79.00,
+                'description' => 'Unlimited multi-item cart quotes, expiration & Draft Order checkout, Reusable Shopping Lists, and Multi-Language Translations',
                 'plan_type' => 'advanced',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'orderAdv',
-                'name' => 'Quick bulk order via CSV & SKU',
-                'price' => 49.00,
-                'description' => 'Support buyers order and re-order quickly',
-                'plan_type' => 'advanced',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'listAdv',
-                'name' => 'Reusable B2B shopping lists',
-                'price' => 69.00,
-                'description' => 'Manage B2B shopping lists',
-                'plan_type' => 'advanced',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'financeAdv',
-                'name' => 'B2B finance, credit & ledger',
-                'price' => 99.00,
-                'description' => 'Manage B2B credit accounts',
-                'plan_type' => 'advanced',
-                'is_default' => false,
+                'is_default' => true,
             ],
 
-            // Plus plan modules
+            // Enterprise plan modules ($149/mo)
             [
                 'subscription_key' => 'quotePlus',
-                'name' => 'B2B quote request & negotiation',
-                'price' => 69.00,
-                'description' => 'Quote request and price negotiations',
-                'plan_type' => 'plus',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'orderPlus',
-                'name' => 'Quick bulk order via CSV & SKU',
-                'price' => 79.00,
-                'description' => 'Support buyers order and re-order quickly',
-                'plan_type' => 'plus',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'listPlus',
-                'name' => 'Reusable B2B shopping lists',
-                'price' => 99.00,
-                'description' => 'Manage B2B shopping lists',
-                'plan_type' => 'plus',
-                'is_default' => false,
-            ],
-            [
-                'subscription_key' => 'financePlus',
-                'name' => 'B2B finance, credit & ledger',
+                'name' => 'Full Suite: Flow + Team Roles + Credit Limit & Finance Ledger',
                 'price' => 149.00,
-                'description' => 'Manage B2B credit accounts',
+                'description' => 'Everything in Advanced plus Shopify Flow automations, Buyer Team Roles, Credit Limits, and Finance Ledger Portal',
                 'plan_type' => 'plus',
-                'is_default' => false,
+                'is_default' => true,
             ],
         ];
 

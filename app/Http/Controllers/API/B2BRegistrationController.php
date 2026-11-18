@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Models\B2BNotificationSetting;
 use App\Jobs\TriggerB2BRegistrationFlow;
+use App\Services\B2BNotificationService;
 use Exception;
 use Illuminate\Http\Request;
 use App\Traits\HasShopifyApi;
@@ -69,10 +70,20 @@ class B2BRegistrationController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show($id): JsonResponse
+    public function show(Request $request, $id): JsonResponse
     {
         try {
-            $application = B2BApplication::findOrFail($id);
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
+
+            $application = B2BApplication::where('shop_domain', $shopDomain)
+                ->where('id', $id)
+                ->firstOrFail();
 
             return response()->json([
                 'success' => true,
@@ -84,6 +95,35 @@ class B2BRegistrationController extends Controller
                 'success' => false,
                 'message' => 'Failed to retrieve application details.'
             ], 404);
+        }
+    }
+
+    /**
+     * Securely stream/download the uploaded business verification document for a B2B application.
+     */
+    public function downloadDocument(Request $request, $id)
+    {
+        try {
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json(['success' => false, 'message' => 'Shop domain is required.'], 400);
+            }
+
+            $application = B2BApplication::where('shop_domain', $shopDomain)
+                ->where('id', $id)
+                ->firstOrFail();
+
+            if (!$application->business_document_path || !Storage::disk('local')->exists($application->business_document_path)) {
+                return response()->json(['success' => false, 'message' => 'Business document not found.'], 404);
+            }
+
+            return Storage::disk('local')->download(
+                $application->business_document_path,
+                basename($application->business_document_path)
+            );
+        } catch (Exception $e) {
+            Log::error("Error downloading document for B2B Application ID {$id}: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to retrieve document.'], 404);
         }
     }
 
@@ -164,9 +204,30 @@ class B2BRegistrationController extends Controller
 
             Log::info('New B2B registration application saved', ['application_id' => $application->id]);
 
-            // Dispatch the Shopify Flow trigger AFTER the response is sent
-            // so the 5-15s GraphQL call never blocks the browser's success screen.
-            TriggerB2BRegistrationFlow::dispatch($application->id, $shopDomain)->afterResponse();
+            // Send staff email notification if enabled
+            if ($shopDomain) {
+                $notifier = app(B2BNotificationService::class);
+                $staffEmail = $notifier->resolveStaffEmail($shopDomain);
+                $notifier->sendIfEnabled(
+                    $shopDomain,
+                    'b2b_submission_received',
+                    $staffEmail,
+                    "New B2B Application: {$application->company_name}",
+                    'New B2B Registration Application Received',
+                    [
+                        "Company: {$application->company_name}",
+                        "Applicant: {$application->first_name} {$application->last_name} ({$application->email})",
+                        "Location: {$application->city}, {$application->country}",
+                        'Log in to your Shopify Admin to review and approve or reject this application.',
+                    ]
+                );
+
+                // Dispatch Shopify Flow trigger on Enterprise plan
+                $shopRecord = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
+                if ($shopRecord && in_array(strtolower($shopRecord->active_plan ?? 'free'), ['plus', 'enterprise'], true)) {
+                    TriggerB2BRegistrationFlow::dispatch($application->id, $shopDomain)->afterResponse();
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -198,11 +259,20 @@ class B2BRegistrationController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function approve($id): JsonResponse
+    public function approve(Request $request, $id): JsonResponse
     {
         try {
-            $application = B2BApplication::findOrFail($id);
-            $shopDomain = $application->shop_domain;
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
+
+            $application = B2BApplication::where('shop_domain', $shopDomain)
+                ->where('id', $id)
+                ->firstOrFail();
 
             // Prepare B2B Company Creation Payload
             $companyName = $application->company_name;
@@ -317,10 +387,20 @@ class B2BRegistrationController extends Controller
 
             if (!$res['success']) {
                 $errorMessage = $res['error'] ?? (isset($res['errors']) ? json_encode($res['errors']) : 'Unknown Shopify error');
-                Log::error("Shopify GraphQL B2B Company creation failed: {$errorMessage}");
+                Log::warning("Shopify GraphQL B2B Company creation failed, evaluating standard customer fallback: {$errorMessage}");
+
+                $isB2BUnavailable = str_contains(strtolower($errorMessage), 'shopify plus')
+                    || str_contains(strtolower($errorMessage), 'access_denied')
+                    || str_contains(strtolower($errorMessage), 'b2b')
+                    || str_contains(strtolower($errorMessage), 'companycreate');
+
+                if ($isB2BUnavailable) {
+                    return $this->approveAsStandardCustomer($application, $shopDomain, $contactMetafields);
+                }
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Shopify company creation failed: ' . $errorMessage
+                    'message' => 'Shopify company creation failed. Please verify store permissions and try again.'
                 ], 500);
             }
 
@@ -405,6 +485,20 @@ class B2BRegistrationController extends Controller
 
             Log::info("B2B Application Approved: ID {$id}");
 
+            // Notify applicant by email if enabled
+            app(B2BNotificationService::class)->sendIfEnabled(
+                $shopDomain,
+                'b2b_submission_approved',
+                $application->email,
+                "Your B2B Account Has Been Approved — {$application->company_name}",
+                'Welcome! Your Wholesale Account Is Approved',
+                [
+                    "Hi {$application->first_name},",
+                    "Your B2B wholesale application for {$application->company_name} has been approved.",
+                    'You can now log in to our store to access wholesale capabilities and request custom quotes.',
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Application has been approved successfully.',
@@ -418,6 +512,84 @@ class B2BRegistrationController extends Controller
                 'message' => 'Failed to approve application.'
             ], 500);
         }
+    }
+
+    /**
+     * Fallback approval for non-Plus / standard Shopify plans:
+     * Creates or updates a standard Shopify Customer tagged with 'b2b-approved' and company metadata.
+     */
+    private function approveAsStandardCustomer(B2BApplication $application, string $shopDomain, array $contactMetafields = []): JsonResponse
+    {
+        $customerId = $this->getShopifyCustomerIdByEmail($application->email, $shopDomain);
+
+        if ($customerId) {
+            $mutation = '
+            mutation customerUpdate($input: CustomerInput!) {
+              customerUpdate(input: $input) {
+                customer { id }
+                userErrors { field message }
+              }
+            }';
+
+            $input = [
+                'id' => $customerId,
+                'firstName' => $application->first_name,
+                'lastName' => $application->last_name,
+                'tags' => ['b2b-approved', 'wholesale'],
+                'note' => "B2B Company: {$application->company_name}" . ($application->tax_id ? " | Tax ID: {$application->tax_id}" : ''),
+            ];
+            if (!empty($contactMetafields)) {
+                $input['metafields'] = $contactMetafields;
+            }
+            $res = $this->queryShopifyGraphQL($mutation, ['input' => $input], $shopDomain);
+            $customerId = $res['data']['customerUpdate']['customer']['id'] ?? $customerId;
+        } else {
+            $mutation = '
+            mutation customerCreate($input: CustomerInput!) {
+              customerCreate(input: $input) {
+                customer { id }
+                userErrors { field message }
+              }
+            }';
+
+            $input = [
+                'firstName' => $application->first_name,
+                'lastName' => $application->last_name,
+                'email' => $application->email,
+                'tags' => ['b2b-approved', 'wholesale'],
+                'note' => "B2B Company: {$application->company_name}" . ($application->tax_id ? " | Tax ID: {$application->tax_id}" : ''),
+            ];
+            if (!empty($contactMetafields)) {
+                $input['metafields'] = $contactMetafields;
+            }
+            $res = $this->queryShopifyGraphQL($mutation, ['input' => $input], $shopDomain);
+            $customerId = $res['data']['customerCreate']['customer']['id'] ?? null;
+        }
+
+        $application->update([
+            'status' => 'Approved',
+            'shopify_customer_id' => $customerId ?? $application->shopify_customer_id,
+        ]);
+
+        app(B2BNotificationService::class)->sendIfEnabled(
+            $shopDomain,
+            'b2b_submission_approved',
+            $application->email,
+            "Your B2B Account Has Been Approved — {$application->company_name}",
+            'Welcome! Your Wholesale Account Is Approved',
+            [
+                "Hi {$application->first_name},",
+                "Your B2B wholesale application for {$application->company_name} has been approved.",
+                'You can now log in to our store to access wholesale capabilities.',
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Application approved as a tagged B2B Customer (standard Shopify plan fallback).',
+            'data' => $application,
+            'shopify' => ['shopify_customer_id' => $customerId]
+        ]);
     }
 
 
@@ -558,13 +730,36 @@ class B2BRegistrationController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function reject($id): JsonResponse
+    public function reject(Request $request, $id): JsonResponse
     {
         try {
-            $application = B2BApplication::findOrFail($id);
+            $shopDomain = $this->resolveShopDomain($request);
+            if (!$shopDomain) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shop domain is required.'
+                ], 400);
+            }
+
+            $application = B2BApplication::where('shop_domain', $shopDomain)
+                ->where('id', $id)
+                ->firstOrFail();
             $application->update(['status' => 'Rejected']);
 
-            Log::info("B2B Application Rejected: ID {$id}");
+            Log::info("B2B Application Rejected: ID {$id} for shop {$shopDomain}");
+
+            app(B2BNotificationService::class)->sendIfEnabled(
+                $shopDomain,
+                'b2b_submission_rejected',
+                $application->email,
+                "Update on Your B2B Application — {$application->company_name}",
+                'Update on Your Wholesale Application',
+                [
+                    "Hi {$application->first_name},",
+                    "Thank you for applying for a wholesale account for {$application->company_name}.",
+                    'Unfortunately, we were unable to approve your application at this time. Please reply or contact our store support for more details.',
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -631,7 +826,8 @@ class B2BRegistrationController extends Controller
                 'success' => true,
                 'data' => [
                     'active_plan' => $shop->active_plan ?? 'free',
-                    'selected_modules' => $shop->selected_modules ?? []
+                    'selected_modules' => $shop->selected_modules ?? [],
+                    'billing_cycle' => $shop->billing_cycle ?? 'monthly',
                 ]
             ]);
         } catch (Exception $e) {
@@ -669,12 +865,36 @@ class B2BRegistrationController extends Controller
             }
 
             $activePlan = $request->input('active_plan', 'free');
+            $billingCycle = $request->input('billing_cycle', 'monthly') === 'annually' ? 'annually' : 'monthly';
             $modules = $request->input('selected_modules', []);
+            if (!is_array($modules)) {
+                $modules = [];
+            }
 
-            // Calculate total price based on selected modules
-            $totalPrice = \App\Models\B2BSubscription::whereIn('subscription_key', $modules)->sum('price');
+            // Scope selected modules strictly to the chosen plan tier so other tiers' checkboxes don't inflate charges
+            $planModulesQuery = \App\Models\B2BSubscription::where('plan_type', $activePlan);
+            if (!empty($modules)) {
+                $planModulesQuery->whereIn('subscription_key', $modules);
+            }
+            $matchedModules = $activePlan === 'free'
+                ? \App\Models\B2BSubscription::where('plan_type', 'free')->get()
+                : $planModulesQuery->get();
 
-            if ($totalPrice > 0) {
+            $validModuleKeys = $matchedModules->pluck('subscription_key')->toArray();
+            $monthlyTotal = (float) $matchedModules->sum('price');
+
+            if ($activePlan !== 'free' && $monthlyTotal <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please select at least one paid module for this plan.'
+                ], 422);
+            }
+
+            if ($monthlyTotal > 0) {
+                $isAnnual = $billingCycle === 'annually';
+                $chargeAmount = $isAnnual ? round($monthlyTotal * 12 * 0.8, 2) : round($monthlyTotal, 2);
+                $interval = $isAnnual ? 'ANNUAL' : 'EVERY_30_DAYS';
+
                 $mutation = '
                 mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
                   appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
@@ -692,22 +912,24 @@ class B2BRegistrationController extends Controller
                 $returnUrl = route('shopify.billing.callback', [
                     'shop' => $shopDomain,
                     'plan' => $activePlan,
-                    'modules' => implode(',', $modules)
+                    'billing_cycle' => $billingCycle,
+                    'modules' => implode(',', $validModuleKeys)
                 ]);
 
+                $planDisplayName = $activePlan === 'plus' ? 'Enterprise' : ucfirst($activePlan);
                 $variables = [
-                    'name' => ucfirst($activePlan) . ' Subscription (' . count($modules) . ' modules)',
+                    'name' => $planDisplayName . ' Plan (' . ($isAnnual ? 'Annual' : 'Monthly') . ')',
                     'returnUrl' => $returnUrl,
-                    'test' => true, // Sandbox test mode enabled
+                    'test' => (bool) config('shopify.billing_test', false),
                     'lineItems' => [
                         [
                             'plan' => [
                                 'appRecurringPricingDetails' => [
                                     'price' => [
-                                        'amount' => (float)$totalPrice,
+                                        'amount' => $chargeAmount,
                                         'currencyCode' => 'USD'
                                     ],
-                                    'interval' => 'EVERY_30_DAYS'
+                                    'interval' => $interval
                                 ]
                             ]
                         ]
@@ -736,18 +958,23 @@ class B2BRegistrationController extends Controller
                 ], 500);
             }
 
-            // Free plan saving directly
-            $shop->active_plan = $activePlan;
-            $shop->selected_modules = $modules;
+            // Switching to Free plan: cancel any active recurring Shopify subscription so the merchant is no longer billed
+            $this->cancelActiveShopifySubscriptions($shop, $shopDomain);
+
+            $shop->active_plan = 'free';
+            $shop->selected_modules = $validModuleKeys;
+            $shop->shopify_subscription_id = null;
+            $shop->billing_cycle = 'monthly';
             $shop->save();
 
             return response()->json([
                 'success' => true,
                 'requires_billing' => false,
-                'message' => 'Shop plan and modules updated successfully.',
+                'message' => 'Switched to Free plan successfully.',
                 'data' => [
                     'active_plan' => $shop->active_plan,
-                    'selected_modules' => $shop->selected_modules
+                    'selected_modules' => $shop->selected_modules,
+                    'billing_cycle' => $shop->billing_cycle,
                 ]
             ]);
         } catch (Exception $e) {
@@ -924,14 +1151,80 @@ class B2BRegistrationController extends Controller
     }
 
     /**
+     * Cancel any active Shopify recurring app subscriptions before downgrading to Free.
+     */
+    private function cancelActiveShopifySubscriptions(\App\Models\ShopifyShop $shop, string $shopDomain): void
+    {
+        $subscriptionIds = [];
+
+        if (!empty($shop->shopify_subscription_id)) {
+            $subscriptionIds[] = $shop->shopify_subscription_id;
+        }
+
+        // Also query Shopify directly in case subscription ID wasn't stored locally
+        $activeQuery = '
+        query {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              status
+            }
+          }
+        }';
+
+        $activeRes = $this->queryShopifyGraphQL($activeQuery, [], $shopDomain);
+        if ($activeRes['success']) {
+            $activeSubs = $activeRes['data']['currentAppInstallation']['activeSubscriptions'] ?? [];
+            foreach ($activeSubs as $sub) {
+                if (!empty($sub['id']) && !in_array($sub['id'], $subscriptionIds, true)) {
+                    $subscriptionIds[] = $sub['id'];
+                }
+            }
+        }
+
+        if (empty($subscriptionIds)) {
+            return;
+        }
+
+        $cancelMutation = '
+        mutation appSubscriptionCancel($id: ID!) {
+          appSubscriptionCancel(id: $id) {
+            appSubscription {
+              id
+              status
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }';
+
+        foreach ($subscriptionIds as $subId) {
+            $cancelRes = $this->queryShopifyGraphQL($cancelMutation, ['id' => $subId], $shopDomain);
+            if ($cancelRes['success']) {
+                $errors = $cancelRes['data']['appSubscriptionCancel']['userErrors'] ?? [];
+                if (!empty($errors)) {
+                    Log::warning("Failed to cancel Shopify subscription {$subId} for {$shopDomain}", ['errors' => $errors]);
+                } else {
+                    Log::info("Cancelled Shopify subscription {$subId} for {$shopDomain}");
+                }
+            }
+        }
+    }
+
+    /**
      * Resolve the active shop domain from request.
      */
     private function resolveShopDomain(Request $request): ?string
     {
         $shop = $request->header('X-Shop-Domain') 
             ?? $request->input('shop') 
-            ?? $request->query('shop')
-            ?? config('shopify.shop_domain');
+            ?? $request->query('shop');
+
+        if (!$shop && config('app.env') === 'testing') {
+            $shop = config('shopify.shop_domain');
+        }
 
         if ($shop) {
             $shop = preg_replace('/^https?:\/\//i', '', $shop);
@@ -996,7 +1289,8 @@ class B2BRegistrationController extends Controller
         }
 
         $shopName = explode('.', $shopDomain)[0];
-        $appLink = "https://admin.shopify.com/store/{$shopName}/apps/b2bdev/customers/{$application->id}";
+        $appHandle = config('shopify.app_handle', 'b2bdev');
+        $appLink = "https://admin.shopify.com/store/{$shopName}/apps/{$appHandle}/customers/{$application->id}";
 
         $payload = [
             'Your field key' => 'New B2B registration submitted by: ' . $application->first_name . ' ' . $application->last_name . ' (' . $application->company_name . ')',

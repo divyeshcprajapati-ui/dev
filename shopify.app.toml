@@ -8,9 +8,29 @@ embedded = true
 [webhooks]
 api_version = "2026-04"
 
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/shopify/app-uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/shopify/app-subscriptions-update"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request" ]
+  uri = "/webhooks/shopify/customers-data-request"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/redact" ]
+  uri = "/webhooks/shopify/customers-redact"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "shop/redact" ]
+  uri = "/webhooks/shopify/shop-redact"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_customers,write_customers,read_companies,write_companies"
+scopes = "read_customers,write_customers,read_companies,write_companies,write_draft_orders,read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 

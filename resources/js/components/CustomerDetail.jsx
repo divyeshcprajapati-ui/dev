@@ -21,39 +21,48 @@ export default function CustomerDetail() {
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [actionSuccess, setActionSuccess] = useState('');
   const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [downloadingDoc, setDownloadingDoc] = useState(false);
+
+  const handleDownloadDocument = async () => {
+    if (!customer?.business_document_path) return;
+    setDownloadingDoc(true);
+    setActionError('');
+    try {
+      const blob = await registrationService.downloadDocument(id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = customer.business_document_path.split('/').pop() || `document-${id}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Document download failed:', err);
+      setActionError(err.message || 'Failed to download business document.');
+    } finally {
+      setDownloadingDoc(false);
+    }
+  };
 
   useEffect(() => {
     const fetchCustomer = async () => {
       setLoading(true);
+      setError('');
       try {
         const response = await registrationService.getApplication(id);
         if (response && response.success && response.data) {
           setCustomer(response.data);
-        } else if (response && !response.success && response.data) {
-           setCustomer(response.data);
         } else {
-           setCustomer(response);
+          setError(response?.message || 'Customer application not found.');
         }
       } catch (err) {
         console.error("Failed fetching customer:", err);
-        // Fallback to local storage for demo/mock purposes
-        const saved = localStorage.getItem('b2b_submissions');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            const found = parsed.find(sub => String(sub.id) === String(id));
-            if (found) {
-              setCustomer(found);
-            } else {
-              setError("Customer not found.");
-            }
-          } catch (e) {
-            setError("Failed to parse local cache.");
-          }
-        } else {
-          setError(err.message || "Failed to load customer details.");
-        }
+        setError(err.message || "Failed to load customer details.");
       } finally {
         setLoading(false);
       }
@@ -64,31 +73,42 @@ export default function CustomerDetail() {
   const handleApprove = async () => {
     if (!customer) return;
     setApproving(true);
+    setActionError('');
+    setActionSuccess('');
     try {
-      await registrationService.approveApplication(id);
-      
-      // Update local state
-      setCustomer({ ...customer, status: 'Approved' });
-      
-      // Update local storage if needed
-      const saved = localStorage.getItem('b2b_submissions');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const updated = parsed.map(sub => String(sub.id) === String(id) ? { ...sub, status: 'Approved' } : sub);
-        localStorage.setItem('b2b_submissions', JSON.stringify(updated));
+      const response = await registrationService.approveApplication(id);
+      if (response && response.success) {
+        setCustomer(response.data || { ...customer, status: 'Approved' });
+        setActionSuccess('B2B company application approved and synced with Shopify.');
+      } else {
+        setActionError(response?.message || 'Failed to approve application.');
       }
     } catch (err) {
       console.error("Failed to approve:", err);
-      // Mock approval
-      setCustomer({ ...customer, status: 'Approved' });
-      const saved = localStorage.getItem('b2b_submissions');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const updated = parsed.map(sub => String(sub.id) === String(id) ? { ...sub, status: 'Approved' } : sub);
-        localStorage.setItem('b2b_submissions', JSON.stringify(updated));
-      }
+      setActionError(err.message || 'Failed to approve application. Please try again.');
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!customer) return;
+    setRejecting(true);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const response = await registrationService.rejectApplication(id);
+      if (response && response.success) {
+        setCustomer(response.data || { ...customer, status: 'Rejected' });
+        setActionSuccess('Application has been rejected.');
+      } else {
+        setActionError(response?.message || 'Failed to reject application.');
+      }
+    } catch (err) {
+      console.error("Failed to reject:", err);
+      setActionError(err.message || 'Failed to reject application.');
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -151,13 +171,32 @@ export default function CustomerDetail() {
         content: 'Approve company',
         onAction: handleApprove,
         loading: approving,
-        disabled: rawStatus === 'Approved'
+        disabled: rawStatus === 'Approved' || rejecting
       }}
+      secondaryActions={rawStatus !== 'Approved' && rawStatus !== 'Rejected' ? [
+        {
+          content: 'Reject application',
+          destructive: true,
+          onAction: handleReject,
+          loading: rejecting,
+          disabled: approving
+        }
+      ] : []}
     >
       <BlockStack gap="400">
+        {actionError && (
+          <Banner tone="critical" onDismiss={() => setActionError('')}>
+            <p>{actionError}</p>
+          </Banner>
+        )}
+        {actionSuccess && (
+          <Banner tone="success" onDismiss={() => setActionSuccess('')}>
+            <p>{actionSuccess}</p>
+          </Banner>
+        )}
         {isFailed && (
-          <Banner tone="warning" onDismiss={() => {}}>
-            <p>The VAT number submitted is invalid. Please contact the applicant to verify their VAT number before approving the registration.</p>
+          <Banner tone="warning">
+            <p>This application was marked as {rawStatus.toLowerCase()}. Review the applicant details before taking further action.</p>
           </Banner>
         )}
 
@@ -166,7 +205,6 @@ export default function CustomerDetail() {
             <Card padding="0">
               <div style={{ padding: '16px', borderBottom: '1px solid #e1e3e5', display: 'flex', justifyContent: 'space-between' }}>
                  <Text variant="headingMd" as="h2">Submission</Text>
-                 <span style={{ cursor: 'pointer', color: '#5c5f62' }}>✎</span>
               </div>
               <div style={{ padding: '16px' }}>
                 <BlockStack gap="400">
@@ -283,9 +321,8 @@ export default function CustomerDetail() {
           <Layout.Section variant="oneThird">
             <BlockStack gap="400">
               <Card padding="400">
-                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                 <div style={{ marginBottom: '16px' }}>
                     <Text variant="headingMd" as="h2">Contact information</Text>
-                    <span style={{ cursor: 'pointer', color: '#5c5f62' }}>✎</span>
                  </div>
                  <BlockStack gap="200">
                     <Box>
@@ -303,21 +340,19 @@ export default function CustomerDetail() {
                  </BlockStack>
               </Card>
 
-              <Card padding="400">
-                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <Text variant="headingMd" as="h2">Payment terms</Text>
-                    <span style={{ cursor: 'pointer', color: '#5c5f62' }}>✎</span>
-                 </div>
-                 <Text variant="bodyMd" tone="subdued">No payment terms</Text>
-              </Card>
-
-              <Card padding="400">
-                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <Text variant="headingMd" as="h2">Catalogs</Text>
-                    <span style={{ cursor: 'pointer', color: '#5c5f62' }}>✎</span>
-                 </div>
-                 <Text variant="bodyMd" tone="subdued">No catalogs</Text>
-              </Card>
+              {customer.business_document_path && (
+                <Card padding="400">
+                  <BlockStack gap="300">
+                    <Text variant="headingMd" as="h2">Business document</Text>
+                    <Text variant="bodySm" tone="subdued">
+                      {customer.business_document_path.split('/').pop()}
+                    </Text>
+                    <Button onClick={handleDownloadDocument} loading={downloadingDoc} fullWidth>
+                      Download verification document
+                    </Button>
+                  </BlockStack>
+                </Card>
+              )}
             </BlockStack>
           </Layout.Section>
         </Layout>

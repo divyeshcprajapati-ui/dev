@@ -1,0 +1,91 @@
+<div class="b2b-reorder" style="max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <h2 style="margin:0 0 12px 0;font-size:22px;color:#111827;">{{ block.settings.title }}</h2>
+  <div id="b2b-reorder-status" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:14px;font-weight:600;"></div>
+
+  {%- if customer -%}
+    {%- if customer.orders.size > 0 -%}
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead>
+          <tr style="border-bottom:2px solid #f1f5f9;text-align:left;color:#64748b;">
+            <th style="padding:10px 8px;">Order</th>
+            <th style="padding:10px 8px;">Date</th>
+            <th style="padding:10px 8px;">Items</th>
+            <th style="padding:10px 8px;">Total</th>
+            <th style="padding:10px 8px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {%- for order in customer.orders limit: 20 -%}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:12px 8px;font-weight:700;">{{ order.name }}</td>
+              <td style="padding:12px 8px;color:#64748b;">{{ order.created_at | date: '%b %d, %Y' }}</td>
+              <td style="padding:12px 8px;">{{ order.line_items.size }} item(s)</td>
+              <td style="padding:12px 8px;font-weight:600;">{{ order.total_price | money }}</td>
+              <td style="padding:12px 8px;">
+                <button
+                  type="button"
+                  class="b2b-reorder-btn"
+                  data-items='[{%- for line in order.line_items -%}{%- if line.variant_id -%}{"id":{{ line.variant_id }},"quantity":{{ line.quantity }}}{% unless forloop.last %},{% endunless %}{%- endif -%}{%- endfor -%}]'
+                  style="padding:8px 14px;background:#008060;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;"
+                >
+                  Reorder All
+                </button>
+              </td>
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+    {%- else -%}
+      <p style="color:#64748b;">You have no previous orders to reorder yet.</p>
+    {%- endif -%}
+  {%- else -%}
+    <p style="color:#64748b;margin-bottom:16px;">Please log in to reorder from your past wholesale orders.</p>
+    <a href="/account/login" style="display:inline-block;padding:10px 20px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Log In</a>
+  {%- endif -%}
+</div>
+
+<script>
+(function() {
+  document.querySelectorAll('.b2b-reorder-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const statusEl = document.getElementById('b2b-reorder-status');
+      try {
+        const raw = this.getAttribute('data-items').replace(/,\s*]/g, ']');
+        const items = JSON.parse(raw);
+        if (!items.length) return;
+        const res = await fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items })
+        });
+        statusEl.style.display = 'block';
+        if (res.ok) {
+          statusEl.style.background = '#dcfce7';
+          statusEl.style.color = '#166534';
+          statusEl.textContent = 'Order items added to your cart! Redirecting...';
+          setTimeout(() => { window.location.href = '/cart'; }, 700);
+        } else {
+          statusEl.style.background = '#fee2e2';
+          statusEl.style.color = '#991b1b';
+          statusEl.textContent = 'Some items in this order are no longer available.';
+        }
+      } catch (e) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = '#fee2e2';
+        statusEl.style.color = '#991b1b';
+        statusEl.textContent = 'Unable to reorder this order.';
+      }
+    });
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "B2B 1-Click Reorder",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Quick Reorder Past Orders" }
+  ]
+}
+{% endschema %}

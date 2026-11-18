@@ -1,3 +1,4 @@
+{% render 'b2b_i18n_script' %}
 <div class="b2b-cart-quote-wrapper" style="margin: 20px 0; text-align: right;">
   <button type="button" id="b2b-cart-quote-btn" class="button button--secondary" style="
     padding: 12px 24px;
@@ -31,6 +32,7 @@
       <div id="b2b-cart-quote-success-banner" style="display: none; padding: 16px; background-color: #dcfce7; color: #166534; border-radius: 8px; margin: 24px; font-weight: 600; text-align: center;">
         Cart quote request submitted successfully!
       </div>
+      <div id="b2b-cart-quote-error-banner" style="display: none; padding: 12px 16px; background-color: #fee2e2; color: #991b1b; border-radius: 8px; margin: 16px 24px 0; font-size: 14px; font-weight: 600;"></div>
 
       <div class="b2b-modal-body" style="overflow-y: auto; flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
         <div class="b2b-cart-items-list" style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 8px;">
@@ -185,10 +187,18 @@
 
 <script>
   (function() {
-    const API_BASE_URL = 'https://onshore-embezzle-skinny.ngrok-free.dev';
+    const API_BASE_URL = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
     const shopDomain = '{{ shop.permanent_domain }}';
     const customerEmail = '{{ customer.email }}';
+    const activeLocale = '{{ request.locale.iso_code }}';
     const cartItemCount = {{ cart.item_count | default: 0 }};
+
+    if (window.B2B_I18N) {
+      window.B2B_I18N.load(API_BASE_URL, shopDomain, activeLocale, 'quotation').then(t => {
+        const cartBtn = document.getElementById('b2b-cart-quote-btn');
+        if (cartBtn && t.request_cart_quote) cartBtn.textContent = t.request_cart_quote;
+      });
+    }
 
     // Safe dynamic address loading
     const address1 = `{{ customer.default_address.address1 }}`;
@@ -283,13 +293,14 @@
         // Collect items
         const items = [];
         const itemRows = document.querySelectorAll('.b2b-cart-item-row');
+        const parsePrice = (val) => parseFloat(String(val || '0').replace(/,/g, '').replace(/[^0-9.-]/g, '')) || 0;
         itemRows.forEach(row => {
           const productName = row.getAttribute('data-title');
-          const originalPrice = parseFloat(row.getAttribute('data-original-price'));
-          const quantity = parseInt(row.getAttribute('data-qty'));
+          const originalPrice = parsePrice(row.getAttribute('data-original-price'));
+          const quantity = parseInt(row.getAttribute('data-qty'), 10) || 1;
           const imageUrl = row.getAttribute('data-image') || '';
           const targetPriceInput = row.querySelector('.b2b-target-unit-price');
-          const quotedPrice = parseFloat(targetPriceInput.value) || originalPrice;
+          const quotedPrice = parsePrice(targetPriceInput.value) || originalPrice;
 
           items.push({
             product_name: productName,
@@ -331,11 +342,13 @@
               }, 3000);
             }
           } else {
-            alert('Failed to submit cart quote: ' + (data.message || 'Unknown error'));
+            const errEl = document.getElementById('b2b-cart-quote-error-banner');
+            if (errEl) { errEl.textContent = data.message || 'Failed to submit cart quote.'; errEl.style.display = 'block'; }
           }
         } catch (err) {
           console.error(err);
-          alert('An error occurred submitting the cart quote.');
+          const errEl = document.getElementById('b2b-cart-quote-error-banner');
+          if (errEl) { errEl.textContent = 'An error occurred submitting the cart quote.'; errEl.style.display = 'block'; }
         } finally {
           submitBtn.disabled = false;
           submitBtn.textContent = 'Submit Request';
@@ -359,7 +372,8 @@
     { "type": "text", "id": "btn_label", "label": "Button Label", "default": "Request a Quote for Cart" },
     { "type": "color", "id": "btn_bg_color", "label": "Button Background Color", "default": "#1a1a1a" },
     { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" },
-    { "type": "color", "id": "btn_border_color", "label": "Button Border Color", "default": "#1a1a1a" }
+    { "type": "color", "id": "btn_border_color", "label": "Button Border Color", "default": "#1a1a1a" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
   ]
 }
 {% endschema %}

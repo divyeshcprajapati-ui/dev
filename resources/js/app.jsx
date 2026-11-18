@@ -15,6 +15,10 @@ const SinglePageRegistration = lazy(() => import('./components/SinglePageRegistr
 const QuoteSettings = lazy(() => import('./components/QuoteSettings'));
 const CustomerDetail = lazy(() => import('./components/CustomerDetail'));
 const QuoteDetailAdmin = lazy(() => import('./components/QuoteDetailAdmin'));
+const OrderingTools = lazy(() => import('./components/OrderingTools'));
+const ShoppingLists = lazy(() => import('./components/ShoppingLists'));
+const TeamMembers = lazy(() => import('./components/TeamMembers'));
+const CreditFinance = lazy(() => import('./components/CreditFinance'));
 
 import { BrowserRouter, Routes, Route, Link as ReactRouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { NavMenu } from '@shopify/app-bridge-react';
@@ -42,6 +46,18 @@ function prefetchRoute(url) {
       break;
     case '/translations':
       import('./components/Translations');
+      break;
+    case '/ordering':
+      import('./components/OrderingTools');
+      break;
+    case '/shopping-lists':
+      import('./components/ShoppingLists');
+      break;
+    case '/team-members':
+      import('./components/TeamMembers');
+      break;
+    case '/credit-finance':
+      import('./components/CreditFinance');
       break;
     case '/pricing':
       import('./components/Pricing');
@@ -287,6 +303,10 @@ function AdminRoutes() {
           <Route path="/customers/:id" element={<CustomerDetail />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/translations" element={<Translations />} />
+          <Route path="/ordering" element={<OrderingTools />} />
+          <Route path="/shopping-lists" element={<ShoppingLists />} />
+          <Route path="/team-members" element={<TeamMembers />} />
+          <Route path="/credit-finance" element={<CreditFinance />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/register" element={<SinglePageRegistration />} />
         </Routes>

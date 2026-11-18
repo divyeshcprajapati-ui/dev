@@ -1,0 +1,119 @@
+{% render 'b2b_i18n_script' %}
+<div class="b2b-team-members" style="max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <h2 id="b2b-team-title" style="margin:0 0 12px 0;font-size:22px;color:#111827;">{{ block.settings.title }}</h2>
+  <div id="b2b-team-status" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:14px;font-weight:600;"></div>
+
+  {%- if customer -%}
+    <div id="b2b-team-admin-panel" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:20px;">
+      <h3 id="b2b-team-add-heading" style="margin:0 0 12px 0;font-size:15px;color:#111827;">Add Team Member</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 140px auto;gap:10px;align-items:center;">
+        <input id="b2b-tm-name" type="text" placeholder="Full name" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+        <input id="b2b-tm-email" type="email" placeholder="member@company.com" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+        <select id="b2b-tm-role" style="padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#fff;">
+          <option value="Buyer">Buyer</option>
+          <option value="Viewer">Viewer</option>
+          <option value="Admin">Admin</option>
+        </select>
+        <button id="b2b-tm-submit" type="button" style="padding:10px 16px;background:#008060;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">+ Invite</button>
+      </div>
+    </div>
+    <div id="b2b-team-container" style="color:#64748b;">Loading company team members...</div>
+  {%- else -%}
+    <p style="color:#64748b;margin-bottom:16px;">Please log in to view your company team members and permissions.</p>
+    <a href="/account/login" style="display:inline-block;padding:10px 20px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Log In</a>
+  {%- endif -%}
+</div>
+
+<script>
+(function() {
+  const API_BASE = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
+  const shopDomain = '{{ shop.permanent_domain }}';
+  const customerEmail = '{{ customer.email }}'.toLowerCase();
+  const activeLocale = '{{ request.locale.iso_code }}';
+  if (!customerEmail) return;
+
+  let activeCompanyName = '';
+
+  function setStatus(msg, isError) {
+    const el = document.getElementById('b2b-team-status');
+    el.style.display = 'block';
+    el.style.background = isError ? '#fee2e2' : '#dcfce7';
+    el.style.color = isError ? '#991b1b' : '#166534';
+    el.textContent = msg;
+  }
+
+  async function loadTeam() {
+    if (window.B2B_I18N) {
+      const t = await window.B2B_I18N.load(API_BASE, shopDomain, activeLocale, 'members');
+      if (t.title) document.getElementById('b2b-team-title').textContent = t.title;
+      if (t.add_member) document.getElementById('b2b-team-add-heading').textContent = t.add_member;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/b2b/team-members?email=${encodeURIComponent(customerEmail)}&shop=${encodeURIComponent(shopDomain)}`, {
+        headers: { 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' }
+      });
+      const json = await res.json();
+      const el = document.getElementById('b2b-team-container');
+      const members = json.data || [];
+      if (!members.length) { el.innerHTML = '<p>No company team members assigned yet.</p>'; return; }
+
+      const selfMember = members.find(m => (m.email || '').toLowerCase() === customerEmail);
+      if (selfMember) {
+        activeCompanyName = selfMember.company_name;
+        if (selfMember.role === 'Admin' && selfMember.status === 'Active') {
+          document.getElementById('b2b-team-admin-panel').style.display = 'block';
+        }
+      }
+
+      el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead><tr style="border-bottom:2px solid #f1f5f9;text-align:left;color:#64748b;"><th style="padding:8px;">Name</th><th style="padding:8px;">Email</th><th style="padding:8px;">Role</th><th style="padding:8px;">Status</th></tr></thead>
+        <tbody>${members.map(m => `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:10px 8px;font-weight:600;color:#111827;">${m.name}</td><td style="padding:10px 8px;">${m.email}</td><td style="padding:10px 8px;"><strong>${m.role}</strong></td><td style="padding:10px 8px;color:#008060;">${m.status}</td></tr>`).join('')}</tbody>
+      </table>`;
+    } catch (_) {
+      document.getElementById('b2b-team-container').innerHTML = '<p style="color:#991b1b;">Unable to load team directory.</p>';
+    }
+  }
+
+  document.getElementById('b2b-tm-submit')?.addEventListener('click', async function() {
+    const name = document.getElementById('b2b-tm-name').value.trim();
+    const email = document.getElementById('b2b-tm-email').value.trim();
+    const role = document.getElementById('b2b-tm-role').value;
+    if (!name || !email || !activeCompanyName) {
+      setStatus('Please enter member name and email.', true);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/b2b/team-members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ shop: shopDomain, company_name: activeCompanyName, actor_email: customerEmail, name, email, role })
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        document.getElementById('b2b-tm-name').value = '';
+        document.getElementById('b2b-tm-email').value = '';
+        setStatus('Team member added successfully.', false);
+        loadTeam();
+      } else {
+        setStatus(json.message || 'Unable to add team member.', true);
+      }
+    } catch (_) {
+      setStatus('Connection error while adding team member.', true);
+    }
+  });
+
+  loadTeam();
+})();
+</script>
+
+{% schema %}
+{
+  "name": "B2B Team Members",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Company Team & Roles" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
+  ]
+}
+{% endschema %}

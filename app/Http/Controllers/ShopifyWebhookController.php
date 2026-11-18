@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use App\Jobs\ProcessShopifyWebhookJob;
 
 class ShopifyWebhookController extends Controller
@@ -124,6 +125,16 @@ class ShopifyWebhookController extends Controller
                     }
                 });
 
+                // Delete any uploaded private business documents before clearing paths
+                $docPaths = (clone $query)
+                    ->whereNotNull('business_document_path')
+                    ->pluck('business_document_path');
+                foreach ($docPaths as $docPath) {
+                    if ($docPath && Storage::disk('local')->exists($docPath)) {
+                        Storage::disk('local')->delete($docPath);
+                    }
+                }
+
                 $query->update([
                     'first_name' => 'Redacted',
                     'last_name' => 'Redacted',
@@ -148,6 +159,19 @@ class ShopifyWebhookController extends Controller
                         'shipping_address' => 'Redacted',
                         'billing_address' => null,
                     ]);
+
+                // Redact customer PII in shopping lists, team members, and credit accounts
+                \App\Models\B2BShoppingList::when($shopDomain, fn($q) => $q->where('shop_domain', $shopDomain))
+                    ->where('customer_email', $customerEmail)
+                    ->update(['customer_name' => 'Redacted', 'customer_email' => 'redacted@privacy.local']);
+
+                \App\Models\B2BCompanyMember::when($shopDomain, fn($q) => $q->where('shop_domain', $shopDomain))
+                    ->where('email', $customerEmail)
+                    ->delete();
+
+                \App\Models\B2BCreditAccount::when($shopDomain, fn($q) => $q->where('shop_domain', $shopDomain))
+                    ->where('customer_email', $customerEmail)
+                    ->update(['customer_email' => 'redacted@privacy.local']);
             }
 
             Log::info("Successfully redacted customer PII for {$customerEmail} on shop {$shopDomain}");
@@ -176,15 +200,132 @@ class ShopifyWebhookController extends Controller
 
         try {
             if ($shopDomain) {
-                \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->delete();
-                \App\Models\B2BApplication::where('shop_domain', $shopDomain)->delete();
+                // Delete uploaded business documents belonging to this shop
+                $docPaths = \App\Models\B2BApplication::where('shop_domain', $shopDomain)
+                    ->whereNotNull('business_document_path')
+                    ->pluck('business_document_path');
+                foreach ($docPaths as $docPath) {
+                    if ($docPath && Storage::disk('local')->exists($docPath)) {
+                        Storage::disk('local')->delete($docPath);
+                    }
+                }
+
+                // Delete quote items before deleting quotes
+                $quoteIds = \App\Models\B2BQuote::where('shop_domain', $shopDomain)->pluck('id');
+                if ($quoteIds->isNotEmpty()) {
+                    \App\Models\B2BQuoteItem::whereIn('b2b_quote_id', $quoteIds)->delete();
+                }
+
                 \App\Models\B2BQuote::where('shop_domain', $shopDomain)->delete();
-                Log::info("Successfully purged all shop data for {$shopDomain} following shop/redact request.");
+                \App\Models\B2BApplication::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BQuoteSetting::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BNotificationSetting::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BTranslation::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BShoppingList::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BCompanyMember::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BLedgerEntry::where('shop_domain', $shopDomain)->delete();
+                \App\Models\B2BCreditAccount::where('shop_domain', $shopDomain)->delete();
+                \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->delete();
+
+                Log::info("Successfully purged all shop data and files for {$shopDomain} following shop/redact request.");
             }
         } catch (\Exception $e) {
             Log::error("Error processing shop redact for {$shopDomain}: " . $e->getMessage());
         }
 
         return response()->json(['message' => 'Shop redact processed successfully'], 200);
+    }
+
+    /**
+     * Handle Shopify APP_SUBSCRIPTIONS_UPDATE webhook.
+     * Keeps local subscription access synchronized when Shopify activates, freezes,
+     * cancels, declines, or expires a merchant's recurring subscription.
+     */
+    public function handleAppSubscriptionUpdate(Request $request)
+    {
+        if (!$this->verifyHmac($request)) {
+            Log::warning('Shopify app_subscriptions/update webhook HMAC verification failed.');
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $shopDomain = $request->header('x-shopify-shop-domain');
+        $payload = $request->json()->all();
+        $appSubscription = $payload['app_subscription'] ?? $payload;
+
+        $subscriptionGid = $appSubscription['admin_graphql_api_id'] ?? null;
+        $status = strtoupper((string) ($appSubscription['status'] ?? ''));
+        $name = (string) ($appSubscription['name'] ?? '');
+
+        Log::info("Shopify app_subscriptions/update received for {$shopDomain}", [
+            'subscription_id' => $subscriptionGid,
+            'status' => $status,
+            'name' => $name,
+        ]);
+
+        if (!$shopDomain) {
+            return response()->json(['message' => 'Missing shop domain'], 200);
+        }
+
+        try {
+            $shop = \App\Models\ShopifyShop::where('shop_domain', $shopDomain)->first();
+            if (!$shop) {
+                Log::warning("Shop not found for app_subscriptions/update: {$shopDomain}");
+                return response()->json(['message' => 'Shop not found'], 200);
+            }
+
+            if ($status === 'ACTIVE') {
+                // Record the active subscription ID; infer plan from name if webhook arrived before billingCallback
+                if ($subscriptionGid) {
+                    $shop->shopify_subscription_id = $subscriptionGid;
+                }
+
+                if (($shop->active_plan ?? 'free') === 'free' && $name) {
+                    $lowerName = strtolower($name);
+                    if (str_contains($lowerName, 'enterprise') || str_contains($lowerName, 'plus')) {
+                        $shop->active_plan = 'plus';
+                        $shop->selected_modules = ['quotePlus'];
+                    } elseif (str_contains($lowerName, 'advanced')) {
+                        $shop->active_plan = 'advanced';
+                        $shop->selected_modules = ['quoteAdv'];
+                    } elseif (str_contains($lowerName, 'grow')) {
+                        $shop->active_plan = 'grow';
+                        $shop->selected_modules = ['quoteGrow'];
+                    }
+                    if (str_contains($lowerName, 'annual')) {
+                        $shop->billing_cycle = 'annually';
+                    }
+                }
+
+                $shop->save();
+                Log::info("Synchronized ACTIVE subscription for {$shopDomain} (Plan: {$shop->active_plan}, ID: {$shop->shopify_subscription_id})");
+            } elseif (in_array($status, ['CANCELLED', 'FROZEN', 'EXPIRED', 'DECLINED'], true)) {
+                // Guard against upgrade/downgrade race condition:
+                // When a merchant switches plans, Shopify cancels the OLD subscription ID after activating the NEW one.
+                if (
+                    !empty($shop->shopify_subscription_id)
+                    && !empty($subscriptionGid)
+                    && $shop->shopify_subscription_id !== $subscriptionGid
+                ) {
+                    Log::info("Ignoring {$status} webhook for superseded subscription {$subscriptionGid} on {$shopDomain} (current active ID: {$shop->shopify_subscription_id}).");
+                    return response()->json(['message' => 'Superseded subscription ignored'], 200);
+                }
+
+                $freeModules = \App\Models\B2BSubscription::where('plan_type', 'free')
+                    ->pluck('subscription_key')
+                    ->toArray();
+
+                $shop->active_plan = 'free';
+                $shop->selected_modules = $freeModules;
+                $shop->shopify_subscription_id = null;
+                $shop->billing_cycle = 'monthly';
+                $shop->save();
+
+                Log::info("Revoked paid plan access for {$shopDomain} due to subscription status: {$status}");
+            }
+        } catch (\Exception $e) {
+            Log::error("Error processing app_subscriptions/update for {$shopDomain}: " . $e->getMessage());
+        }
+
+        return response()->json(['message' => 'App subscription update processed successfully'], 200);
     }
 }

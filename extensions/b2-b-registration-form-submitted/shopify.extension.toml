@@ -3,7 +3,7 @@ name = "B2B Registration Form Submitted"
 handle = "b2b-registration-form-submitted"
 type = "flow_trigger"
 uid = "3c5cc6be-d368-9576-ec0f-30ea86f808791b6b1575"
-description = "Your description"
+description = "Triggers when a wholesale buyer submits a B2B registration application."
 
 [settings]
 

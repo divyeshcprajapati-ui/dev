@@ -1,10 +1,10 @@
 {
-  "ratings": {
-    "stars": {
-      "label": "Ratings"
+  "b2b": {
+    "registration": {
+      "title": "B2B Registration"
     },
-    "home": {
-      "recommendationText": "Recommended Product!"
+    "quotations": {
+      "title": "My Quotations"
     }
   }
 }

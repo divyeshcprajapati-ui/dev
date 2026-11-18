@@ -21,7 +21,7 @@ export default function CustomerListing() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('all');
-  
+
   // Server-side pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -86,7 +86,7 @@ export default function CustomerListing() {
           applyResponse(fresh, pageNumber);
           writeCache(pageNumber, statusFilter, fresh);
         })
-        .catch(() => {}); // silent background refresh failure is fine
+        .catch(() => { }); // silent background refresh failure is fine
       return;
     }
 
@@ -98,32 +98,7 @@ export default function CustomerListing() {
       writeCache(pageNumber, statusFilter, response);
     } catch (err) {
       console.error("Failed fetching leads:", err);
-      setError(err.message || 'Failed to fetch registered customers. Using mock/local cache.');
-      const saved = localStorage.getItem('b2b_submissions');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            const filtered = parsed.filter(sub => {
-              const s = (sub.status || 'Pending').toLowerCase();
-              if (statusFilter === 'all') return true;
-              if (statusFilter === 'pending') return s === 'pending';
-              if (statusFilter === 'approved') return s === 'approved';
-              if (statusFilter === 'failed') return s === 'failed' || s === 'rejected';
-              return true;
-            });
-            const limit = 20;
-            const startIndex = (pageNumber - 1) * limit;
-            const paged = filtered.slice(startIndex, startIndex + limit);
-            setSubmissions(paged);
-            setTotalPages(Math.ceil(filtered.length / limit) || 1);
-            setTotalItems(filtered.length);
-            setHasMore(startIndex + limit < filtered.length);
-          }
-        } catch (e) {
-          console.error("Failed parsing fallback cache:", e);
-        }
-      }
+      setError(err.message || 'Failed to fetch registered customers. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -156,41 +131,37 @@ export default function CustomerListing() {
   };
 
   const handleApprove = async (id) => {
+    setError('');
     try {
       const response = await registrationService.approveApplication(id);
       if (response && response.success) {
-        setSubmissions(prev => prev.map(sub => 
+        setSubmissions(prev => prev.map(sub =>
           sub.id === id ? { ...sub, status: 'Approved' } : sub
         ));
       } else {
-        updateLocalStatus(id, 'Approved');
+        setError(response?.message || 'Failed to approve application.');
       }
     } catch (err) {
-      updateLocalStatus(id, 'Approved');
+      console.error('Approve failed:', err);
+      setError(err.message || 'Failed to approve application.');
     }
   };
 
   const handleReject = async (id) => {
+    setError('');
     try {
       const response = await registrationService.rejectApplication(id);
       if (response && response.success) {
-        setSubmissions(prev => prev.map(sub => 
+        setSubmissions(prev => prev.map(sub =>
           sub.id === id ? { ...sub, status: 'Rejected' } : sub
         ));
       } else {
-        updateLocalStatus(id, 'Rejected');
+        setError(response?.message || 'Failed to reject application.');
       }
     } catch (err) {
-      updateLocalStatus(id, 'Rejected');
+      console.error('Reject failed:', err);
+      setError(err.message || 'Failed to reject application.');
     }
-  };
-
-  const updateLocalStatus = (id, status) => {
-    const updated = submissions.map(sub => 
-      sub.id === id ? { ...sub, status } : sub
-    );
-    setSubmissions(updated);
-    localStorage.setItem('b2b_submissions', JSON.stringify(updated));
   };
 
   const safeSubmissions = Array.isArray(submissions) ? submissions : [];
@@ -201,7 +172,7 @@ export default function CustomerListing() {
     try {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return dateStr;
-      
+
       const pad = (num) => String(num).padStart(2, '0');
       const hours = pad(date.getHours());
       const minutes = pad(date.getMinutes());
@@ -237,8 +208,8 @@ export default function CustomerListing() {
 
     return [
       <input type="checkbox" style={{ cursor: 'pointer' }} />,
-      <span 
-        style={{ cursor: 'pointer', color: '#005bd3', fontWeight: '500', textDecoration: 'underline' }} 
+      <span
+        style={{ cursor: 'pointer', color: '#005bd3', fontWeight: '500', textDecoration: 'underline' }}
         onClick={() => navigate(`/customers/${sub.id}`)}
       >
         {contactName}
@@ -388,7 +359,7 @@ export default function CustomerListing() {
                   ]}
                   rows={submissionRows}
                 />
-                
+
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
                   <div style={{

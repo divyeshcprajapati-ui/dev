@@ -76,7 +76,7 @@ export default function Notifications() {
     }, 3000);
   };
 
-  // Tabs structure
+  // Tabs structure (only active, implemented modules)
   const tabs = [
     {
       id: 'submission',
@@ -87,7 +87,7 @@ export default function Notifications() {
           <path d="M8 9a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H9a1 1 0 01-1-1z" />
         </svg>
       ),
-      description: 'Configure notifications for new account submissions, approvals, and rejections.'
+      description: 'Configure notification preferences for new account submissions, approvals, and rejections.'
     },
     {
       id: 'quotations',
@@ -97,7 +97,7 @@ export default function Notifications() {
           <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
         </svg>
       ),
-      description: 'Manage email alerts for quote submissions, acceptances, rejections, and auto-responses.'
+      description: 'Manage email notifications for quote submissions, acceptances, rejections, and auto-responses.'
     },
     {
       id: 'members',
@@ -107,7 +107,7 @@ export default function Notifications() {
           <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
         </svg>
       ),
-      description: 'Receive updates when new company members are added or permissions are updated.'
+      description: 'Receive updates when new company members are added or roles are modified.'
     },
     {
       id: 'lists',
@@ -117,7 +117,7 @@ export default function Notifications() {
           <path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
         </svg>
       ),
-      description: 'Control notifications for shopping lists requiring approval or marked as approved.'
+      description: 'Control email alerts for shopping lists submitted for approval or approved.'
     },
     {
       id: 'credit',
@@ -128,7 +128,7 @@ export default function Notifications() {
           <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h3a1 1 0 100-2H9z" clipRule="evenodd" />
         </svg>
       ),
-      description: 'Set alerts for low credit limits and notifications for new credit allocations.'
+      description: 'Set alerts for low credit balances (<10% remaining) and new credit assignments.'
     }
   ];
 
@@ -215,13 +215,13 @@ export default function Notifications() {
       {
         key: 'member_added',
         title: 'New member added',
-        desc: 'Send an email notification to the new member when they are added to a B2B company account.',
+        desc: 'Send an email notification when a new member is added to a B2B company team.',
         recipient: 'Customer email'
       },
       {
         key: 'member_role_updated',
         title: 'Member role updated',
-        desc: 'Send an email notification to the member when their role or permissions are modified.',
+        desc: 'Send an email notification when a member role or permissions are updated.',
         recipient: 'Customer email'
       }
     ],
@@ -229,13 +229,13 @@ export default function Notifications() {
       {
         key: 'list_approved',
         title: 'Shopping list approved',
-        desc: 'Send an email notification to the buyer when their shopping list is approved by an administrator.',
+        desc: 'Send an email notification to the buyer when their shopping list is approved.',
         recipient: 'Customer email'
       },
       {
         key: 'list_pending_approval',
         title: 'Shopping list pending approval',
-        desc: 'Receive an email notification when a shopping list requires approval from administrators.',
+        desc: 'Receive an email notification when a buyer submits a shopping list for approval.',
         recipient: 'Staff email'
       }
     ],
@@ -243,13 +243,13 @@ export default function Notifications() {
       {
         key: 'credit_low_alert',
         title: 'Low credit alert',
-        desc: 'Receive an email alert when a customer’s remaining credit balance falls below 10%.',
+        desc: 'Receive an email alert when a company’s remaining credit falls below 10%.',
         recipient: 'Staff email'
       },
       {
         key: 'credit_assigned',
         title: 'Credit limit assigned',
-        desc: 'Send an email notification to the customer when a new credit limit is assigned to their account.',
+        desc: 'Send an email notification when a new credit limit is assigned to a company account.',
         recipient: 'Customer email'
       }
     ]

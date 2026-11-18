@@ -1,11 +1,12 @@
+{% render 'b2b_i18n_script' %}
 <div class="b2b-registration-block-wrapper" style="background-color: {{ block.settings.bg_color }};">
   <div class="b2b-registration-card">
     <div class="b2b-registration-header">
-      <h2 style="color: {{ block.settings.text_color }};">{{ block.settings.title }}</h2>
-      <p style="color: {{ block.settings.text_color_subdued }};">{{ block.settings.description }}</p>
+      <h2 id="b2b-reg-title" style="color: {{ block.settings.text_color }};">{{ block.settings.title }}</h2>
+      <p id="b2b-reg-desc" style="color: {{ block.settings.text_color_subdued }};">{{ block.settings.description }}</p>
     </div>
 
-    <form id="b2b-registration-form" enctype="multipart/form-data" novalidate>
+    <form id="b2b-registration-form" data-api-base="{{ block.settings.api_base_url }}" data-locale="{{ request.locale.iso_code }}" enctype="multipart/form-data" novalidate>
       <input type="hidden" id="shopify-shop-domain" value="{{ shop.permanent_domain }}">
       {% if customer %}
         <input type="hidden" id="shopify-customer-id" value="gid://shopify/Customer/{{ customer.id }}">
@@ -43,7 +44,8 @@
     { "type": "color", "id": "text_color", "label": "Heading Text Color", "default": "#111827" },
     { "type": "color", "id": "text_color_subdued", "label": "Description Text Color", "default": "#6b7280" },
     { "type": "color", "id": "primary_color", "label": "Primary Color", "default": "#1a1a1a" },
-    { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" }
+    { "type": "color", "id": "btn_text_color", "label": "Button Text Color", "default": "#ffffff" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
   ]
 }
 {% endschema %}

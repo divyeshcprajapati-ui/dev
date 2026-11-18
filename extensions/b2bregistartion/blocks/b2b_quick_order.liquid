@@ -1,0 +1,157 @@
+{% render 'b2b_i18n_script' %}
+<div class="b2b-quick-order" style="max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <h2 id="b2b-qo-title" style="margin:0 0 8px 0;font-size:22px;color:#111827;">{{ block.settings.title }}</h2>
+  <p style="margin:0 0 16px 0;color:#64748b;font-size:14px;">Search products by SKU or title, set quantities, and add everything to your cart in one click.</p>
+  <div id="b2b-qo-status" style="display:none;padding:12px;border-radius:8px;margin-bottom:14px;font-size:14px;font-weight:600;"></div>
+
+  <div style="display:flex;gap:10px;margin-bottom:16px;">
+    <input id="b2b-qo-search" type="text" placeholder="Search SKU or product name..." style="flex:1;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;">
+    <button id="b2b-qo-search-btn" type="button" style="padding:10px 18px;background:#111827;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Search</button>
+  </div>
+
+  <div id="b2b-qo-results" style="margin-bottom:20px;"></div>
+
+  <h3 style="margin:16px 0 10px 0;font-size:16px;color:#111827;">Order Grid</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:2px solid #f1f5f9;text-align:left;color:#64748b;">
+        <th style="padding:8px;">SKU</th>
+        <th style="padding:8px;">Product</th>
+        <th style="padding:8px;">Unit Price</th>
+        <th style="padding:8px;width:90px;">Qty</th>
+        <th style="padding:8px;">Action</th>
+      </tr>
+    </thead>
+    <tbody id="b2b-qo-grid">
+      <tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">Search and add products above to build your quick order.</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:16px;text-align:right;">
+    <button id="b2b-qo-add-cart" type="button" style="padding:12px 24px;background:#008060;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Add All to Cart</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const API_BASE = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
+  const shopDomain = '{{ shop.permanent_domain }}';
+  const activeLocale = '{{ request.locale.iso_code }}';
+  let selectedItems = [];
+
+  if (window.B2B_I18N) {
+    window.B2B_I18N.load(API_BASE, shopDomain, activeLocale, 'bulk').then(t => {
+      if (t.title) document.getElementById('b2b-qo-title').textContent = t.title;
+      if (t.sku_placeholder) document.getElementById('b2b-qo-search').placeholder = t.sku_placeholder;
+      if (t.add_to_cart) document.getElementById('b2b-qo-add-cart').textContent = t.add_to_cart;
+    });
+  }
+
+  function setStatus(msg, isError) {
+    const el = document.getElementById('b2b-qo-status');
+    el.style.display = 'block';
+    el.style.background = isError ? '#fee2e2' : '#dcfce7';
+    el.style.color = isError ? '#991b1b' : '#166534';
+    el.textContent = msg;
+  }
+
+  function renderGrid() {
+    const tbody = document.getElementById('b2b-qo-grid');
+    if (selectedItems.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">Search and add products above to build your quick order.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = selectedItems.map((item, idx) => `
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:8px;">${item.sku || '—'}</td>
+        <td style="padding:8px;">${item.product_title}</td>
+        <td style="padding:8px;">$${Number(item.price).toFixed(2)}</td>
+        <td style="padding:8px;"><input type="number" min="1" value="${item.quantity}" data-idx="${idx}" class="b2b-qo-qty" style="width:72px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></td>
+        <td style="padding:8px;"><button type="button" data-remove="${idx}" style="border:none;background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:6px;cursor:pointer;">Remove</button></td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.b2b-qo-qty').forEach(inp => {
+      inp.addEventListener('change', function() {
+        selectedItems[Number(this.dataset.idx)].quantity = Math.max(1, parseInt(this.value, 10) || 1);
+      });
+    });
+    tbody.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        selectedItems.splice(Number(this.dataset.remove), 1);
+        renderGrid();
+      });
+    });
+  }
+
+  document.getElementById('b2b-qo-search-btn').addEventListener('click', async function() {
+    const q = document.getElementById('b2b-qo-search').value.trim();
+    if (!q) return;
+    const resultsEl = document.getElementById('b2b-qo-results');
+    resultsEl.innerHTML = '<div style="color:#64748b;font-size:13px;">Searching...</div>';
+    try {
+      const res = await fetch(`${API_BASE}/api/b2b/ordering/lookup-skus?q=${encodeURIComponent(q)}&shop=${encodeURIComponent(shopDomain)}`, {
+        headers: { 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' }
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setStatus(json.message || 'SKU search unavailable.', true);
+        resultsEl.innerHTML = '';
+        return;
+      }
+      const rows = json.data || [];
+      if (rows.length === 0) {
+        resultsEl.innerHTML = '<div style="color:#64748b;font-size:13px;">No matching SKUs found.</div>';
+        return;
+      }
+      resultsEl.innerHTML = rows.map((r, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;">
+          <div><strong>${r.product_title}</strong> <span style="color:#64748b;">(${r.sku || 'No SKU'}) — $${Number(r.price).toFixed(2)}</span></div>
+          <button type="button" data-pick="${i}" style="padding:6px 12px;background:#008060;color:#fff;border:none;border-radius:6px;cursor:pointer;">+ Add</button>
+        </div>
+      `).join('');
+      resultsEl.querySelectorAll('[data-pick]').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const item = rows[Number(this.dataset.pick)];
+          const existing = selectedItems.find(x => x.variant_id === item.variant_id);
+          if (existing) existing.quantity += 1;
+          else selectedItems.push({ ...item, quantity: 1 });
+          renderGrid();
+        });
+      });
+    } catch (e) {
+      setStatus('Error searching catalog.', true);
+    }
+  });
+
+  document.getElementById('b2b-qo-add-cart').addEventListener('click', async function() {
+    if (selectedItems.length === 0) { setStatus('Add at least one product first.', true); return; }
+    try {
+      const res = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: selectedItems.map(i => ({ id: Number(i.variant_id), quantity: i.quantity })) })
+      });
+      if (res.ok) {
+        setStatus('Items added to cart! Redirecting...', false);
+        setTimeout(() => { window.location.href = '/cart'; }, 800);
+      } else {
+        setStatus('Some items could not be added to cart.', true);
+      }
+    } catch (e) {
+      setStatus('Failed to add items to cart.', true);
+    }
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "B2B Quick Order Pad",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Quick Order Pad" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
+  ]
+}
+{% endschema %}

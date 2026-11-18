@@ -19,8 +19,9 @@ class ShopifyBillingController extends Controller
         $shopDomain = $request->query('shop');
         $chargeId = $request->query('charge_id');
         $plan = $request->query('plan', 'free');
+        $billingCycle = $request->query('billing_cycle', 'monthly');
         $modulesString = $request->query('modules', '');
-        $modules = $modulesString ? explode(',', $modulesString) : [];
+        $modules = $modulesString ? array_values(array_filter(explode(',', $modulesString))) : [];
 
         if (!$shopDomain || !$chargeId) {
             Log::error('Shopify billing callback missing required parameters.', [
@@ -62,10 +63,12 @@ class ShopifyBillingController extends Controller
             if ($status === 'ACTIVE') {
                 $shop->active_plan = $plan;
                 $shop->selected_modules = $modules;
+                $shop->shopify_subscription_id = $subscription['id'] ?? $chargeGid;
+                $shop->billing_cycle = $billingCycle === 'annually' ? 'annually' : 'monthly';
                 $shop->save();
                 
                 $isActivated = true;
-                Log::info("Successfully activated subscription {$chargeId} for shop {$shopDomain} (Plan: {$plan})");
+                Log::info("Successfully activated subscription {$chargeId} for shop {$shopDomain} (Plan: {$plan}, Cycle: {$shop->billing_cycle})");
             } else {
                 Log::warning("Subscription charge {$chargeId} was not approved. Status: {$status}");
             }
@@ -73,12 +76,12 @@ class ShopifyBillingController extends Controller
             Log::error("Failed to query subscription charge status from Shopify for shop {$shopDomain}");
         }
 
-        // Redirect back to Shopify Admin app dashboard
+        // Redirect back to Shopify Admin app pricing page
         $apiKey = config('shopify.api_key');
         
-        // If billing failed, we can redirect back with a status parameter so the frontend knows to show an error
+        // Pass status parameter so the Pricing UI shows a clear confirmation/error banner
         $statusParam = $isActivated ? 'success' : 'failed';
-        $redirectUrl = "https://{$shopDomain}/admin/apps/{$apiKey}?billing_status={$statusParam}";
+        $redirectUrl = "https://{$shopDomain}/admin/apps/{$apiKey}/pricing?billing_status={$statusParam}";
 
         return redirect($redirectUrl);
     }

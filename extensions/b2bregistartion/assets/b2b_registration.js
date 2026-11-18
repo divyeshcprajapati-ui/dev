@@ -1,13 +1,25 @@
 (function() {
-    const URL = 'https://onshore-embezzle-skinny.ngrok-free.dev';
-    
     document.addEventListener('DOMContentLoaded', async function() {
         const form = document.getElementById('b2b-registration-form');
         if (!form) return;
-        
+
+        const URL = (form.dataset.apiBase || 'https://onshore-embezzle-skinny.ngrok-free.dev').replace(/\/$/, '');
+        const activeLocale = form.dataset.locale || 'en';
+        let i18nStrings = {};
+
         const container = document.getElementById('b2b-dynamic-fields-container');
         const submitBtn = form.querySelector('.submit-btn');
         const shopDomain = document.getElementById('shopify-shop-domain')?.value || (typeof Shopify !== 'undefined' ? Shopify.shop : '');
+
+        if (window.B2B_I18N && shopDomain) {
+            i18nStrings = await window.B2B_I18N.load(URL, shopDomain, activeLocale, 'registration');
+            const titleEl = document.getElementById('b2b-reg-title');
+            const descEl = document.getElementById('b2b-reg-desc');
+            const btnTextEl = form.querySelector('.btn-text');
+            if (titleEl && i18nStrings.title) titleEl.textContent = i18nStrings.title;
+            if (descEl && i18nStrings.description) descEl.textContent = i18nStrings.description;
+            if (btnTextEl && i18nStrings.submit_button) btnTextEl.textContent = i18nStrings.submit_button;
+        }
         
         let steps = [];
         let cData = [];
@@ -322,21 +334,43 @@
                 if (errEl) errEl.textContent = 'Invalid email';
             }
             
-            // Dynamic Tax ID Validation for India (GSTIN)
+            // Dynamic Tax ID Validation for India (GSTIN) & International VAT (UK / EU)
             const countryEl = document.getElementById('country');
             const taxIdEl = document.getElementById('taxId');
             if (countryEl && taxIdEl && taxIdEl.value.trim()) {
                 const selectedOption = countryEl.options[countryEl.selectedIndex];
-                const countryCode = selectedOption ? selectedOption.dataset.code : '';
+                const countryCode = (selectedOption ? selectedOption.dataset.code : '') || '';
                 const countryVal = countryEl.value.trim().toLowerCase();
-                
-                if (countryVal === 'india' || countryCode === 'IN') {
+                const taxVal = taxIdEl.value.trim();
+
+                if (countryVal === 'india' || countryCode.toUpperCase() === 'IN') {
                     const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
-                    if (!gstRegex.test(taxIdEl.value.trim())) {
+                    if (!gstRegex.test(taxVal)) {
                         isValid = false;
                         taxIdEl.classList.add('invalid');
                         const errEl = document.getElementById('error-taxId');
                         if (errEl) errEl.textContent = 'Invalid GSTIN format (e.g. 22AAAAA0000A1Z5)';
+                    }
+                } else {
+                    const vatMap = {
+                        GB: /^(GB)?([0-9]{9}([0-9]{3})?|[A-Z]{2}[0-9]{3})$/i,
+                        DE: /^(DE)?[0-9]{9}$/i,
+                        FR: /^(FR)?[0-9A-Z]{2}[0-9]{9}$/i,
+                        IT: /^(IT)?[0-9]{11}$/i,
+                        ES: /^(ES)?[A-Z0-9][0-9]{7}[A-Z0-9]$/i,
+                        NL: /^(NL)?[0-9]{9}B[0-9]{2}$/i,
+                        BE: /^(BE)?0?[0-9]{9,10}$/i,
+                        AT: /^(AT)?U[0-9]{8}$/i,
+                        PL: /^(PL)?[0-9]{10}$/i,
+                        SE: /^(SE)?[0-9]{12}$/i,
+                        IE: /^(IE)?[0-9][A-Z0-9+*][0-9]{5}[A-Z]{1,2}$/i
+                    };
+                    const vatRegex = vatMap[countryCode.toUpperCase()];
+                    if (vatRegex && !vatRegex.test(taxVal)) {
+                        isValid = false;
+                        taxIdEl.classList.add('invalid');
+                        const errEl = document.getElementById('error-taxId');
+                        if (errEl) errEl.textContent = `Invalid VAT number format for ${countryCode.toUpperCase()}.`;
                     }
                 }
             }
@@ -364,6 +398,11 @@
                 const el = document.getElementById(key);
                 if (el && el.value !== undefined) formData.append(key, el.value.trim());
             });
+            const countrySelect = document.getElementById('country');
+            if (countrySelect && countrySelect.selectedIndex >= 0) {
+                const cCode = countrySelect.options[countrySelect.selectedIndex]?.dataset?.code;
+                if (cCode) formData.append('country_code', cCode);
+            }
             
             const fileInput = document.getElementById('businessDocument');
             if (fileInput && fileInput.files.length > 0) formData.append('businessDocument', fileInput.files[0]);
@@ -405,7 +444,7 @@
                     await buildForm();
                     
                     const successBanner = document.getElementById('general-success');
-                    successBanner.textContent = data.message || 'Submitted successfully!';
+                    successBanner.textContent = i18nStrings.success_message || data.message || 'Submitted successfully!';
                     successBanner.classList.remove('hidden');
                     form.scrollIntoView({ behavior: 'smooth' });
                 } else {

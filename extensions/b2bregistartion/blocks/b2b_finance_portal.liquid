@@ -1,0 +1,63 @@
+<div class="b2b-finance-portal" style="max-width:960px;margin:24px auto;padding:24px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <h2 style="margin:0 0 12px 0;font-size:22px;color:#111827;">{{ block.settings.title }}</h2>
+  {%- if customer -%}
+    <div id="b2b-finance-container" style="color:#64748b;">Loading credit &amp; financial ledger...</div>
+  {%- else -%}
+    <p style="color:#64748b;margin-bottom:16px;">Please log in to view your wholesale credit limit and financial ledger.</p>
+    <a href="/account/login" style="display:inline-block;padding:10px 20px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Log In</a>
+  {%- endif -%}
+</div>
+
+<script>
+(function() {
+  const API_BASE = '{{ block.settings.api_base_url }}'.replace(/\/$/, '');
+  const shopDomain = '{{ shop.permanent_domain }}';
+  const customerEmail = '{{ customer.email }}';
+  if (!customerEmail) return;
+
+  fetch(`${API_BASE}/api/b2b/credit-accounts?email=${encodeURIComponent(customerEmail)}&shop=${encodeURIComponent(shopDomain)}`, {
+    headers: { 'X-Shop-Domain': shopDomain, 'ngrok-skip-browser-warning': 'true' }
+  }).then(r => r.json()).then(json => {
+    const el = document.getElementById('b2b-finance-container');
+    const accounts = json.data || [];
+    if (!accounts.length) { el.innerHTML = '<p>No credit account has been assigned to your company yet.</p>'; return; }
+    el.innerHTML = accounts.map(a => {
+      const limit = Number(a.credit_limit || 0);
+      const used = Number(a.balance_used || 0);
+      const avail = Number(a.available_credit || 0);
+      const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+      return `
+        <div style="border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <strong style="font-size:18px;color:#111827;">${a.company_name}</strong>
+            <span style="padding:4px 12px;border-radius:99px;background:#e3f5ec;color:#008060;font-size:12px;font-weight:700;">${a.payment_terms} • ${a.status}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;"><div style="font-size:12px;color:#64748b;">Credit Limit</div><div style="font-size:18px;font-weight:700;color:#111827;">${a.currency} ${limit.toFixed(2)}</div></div>
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;"><div style="font-size:12px;color:#64748b;">Balance Used</div><div style="font-size:18px;font-weight:700;color:#111827;">${a.currency} ${used.toFixed(2)}</div></div>
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;"><div style="font-size:12px;color:#64748b;">Available Credit</div><div style="font-size:18px;font-weight:700;color:#008060;">${a.currency} ${avail.toFixed(2)}</div></div>
+          </div>
+          <div style="height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-bottom:16px;"><div style="width:${pct}%;height:100%;background:${pct >= 90 ? '#dc2626' : '#008060'};"></div></div>
+          <h4 style="margin:0 0 8px 0;font-size:14px;color:#475569;">Recent Ledger Activity</h4>
+          ${(a.entries || []).length ? `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="border-bottom:1px solid #e2e8f0;text-align:left;color:#64748b;"><th style="padding:6px;">Date</th><th style="padding:6px;">Type</th><th style="padding:6px;">Reference</th><th style="padding:6px;">Amount</th></tr></thead>
+            <tbody>${a.entries.map(e => `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:8px 6px;">${new Date(e.created_at).toLocaleDateString()}</td><td style="padding:8px 6px;text-transform:uppercase;font-weight:600;">${e.type}</td><td style="padding:8px 6px;">${e.reference || '—'}</td><td style="padding:8px 6px;font-weight:600;">${a.currency} ${Number(e.amount).toFixed(2)}</td></tr>`).join('')}</tbody>
+          </table>` : '<p style="font-size:13px;color:#94a3b8;">No ledger transactions recorded yet.</p>'}
+        </div>`;
+    }).join('');
+  }).catch(() => {
+    document.getElementById('b2b-finance-container').innerHTML = '<p style="color:#991b1b;">Unable to load credit account.</p>';
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "B2B Credit & Finance Portal",
+  "target": "section",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Wholesale Credit & Financial Ledger" },
+    { "type": "text", "id": "api_base_url", "label": "App Backend URL", "default": "https://onshore-embezzle-skinny.ngrok-free.dev" }
+  ]
+}
+{% endschema %}

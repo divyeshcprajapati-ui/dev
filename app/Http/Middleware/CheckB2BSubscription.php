@@ -31,35 +31,50 @@ class CheckB2BSubscription
             ], 404);
         }
 
-        $activePlan = $shop->active_plan ?? 'free';
-        $selectedModules = $shop->selected_modules ?? [];
+        $activePlan = strtolower($shop->active_plan ?? 'free');
+        $selectedModules = is_array($shop->selected_modules) ? $shop->selected_modules : [];
 
-        // Free plan includes manageAccounts, teamRoles, signupForm, reviewApps
-        // Paid features require selecting the corresponding module or plan
-        $hasAccess = false;
+        // 4-tier feature hierarchy: free < grow < advanced < plus (Enterprise)
+        $planRank = match ($activePlan) {
+            'plus', 'enterprise' => 3,
+            'advanced' => 2,
+            'grow' => 1,
+            default => 0,
+        };
 
-        if ($activePlan === 'plus') {
-            // Shopify Plus / Enterprise tier has full access to all features
-            $hasAccess = true;
-        } else {
-            if ($feature === 'quote') {
-                // Quotes are enabled if they subscribe to quoteGrow, quoteAdv, or quotePlus
-                $hasAccess = collect($selectedModules)->contains(fn($module) => str_contains($module, 'quote'));
-            } else if ($feature === 'role') {
-                // Team roles are part of the free module
-                $hasAccess = true; 
-            } else if ($feature === 'registration') {
-                // Registration form is free
-                $hasAccess = true;
-            }
-        }
+        $hasAccess = match ($feature) {
+            // Free tier features
+            'registration' => true,
+
+            // Grow+ tier features ($29/mo+)
+            'quote' => $planRank >= 1 || collect($selectedModules)->contains(fn($m) => str_contains((string) $m, 'quote')),
+            'ordering' => $planRank >= 1 || collect($selectedModules)->contains(fn($m) => str_contains((string) $m, 'order')),
+
+            // Advanced+ tier features ($79/mo+)
+            'multi_quote' => $planRank >= 2,
+            'shopping_list' => $planRank >= 2 || collect($selectedModules)->contains(fn($m) => str_contains((string) $m, 'list')),
+            'translations' => $planRank >= 2,
+
+            // Enterprise (plus) tier features ($149/mo)
+            'role', 'team_roles' => $planRank >= 3,
+            'credit', 'finance' => $planRank >= 3 || collect($selectedModules)->contains(fn($m) => str_contains((string) $m, 'finance')),
+            'flow' => $planRank >= 3,
+
+            default => $planRank >= 3,
+        };
 
         if (!$hasAccess) {
+            $requiredPlan = match ($feature) {
+                'quote', 'ordering' => 'Grow',
+                'multi_quote', 'shopping_list', 'translations' => 'Advanced',
+                default => 'Enterprise',
+            };
             Log::warning("Access denied to feature '{$feature}' for shop {$shopDomain} (Active Plan: {$activePlan})");
             return response()->json([
                 'success' => false,
                 'error' => 'UPGRADE_REQUIRED',
-                'message' => "The '{$feature}' feature is not included in your active plan. Please upgrade your subscription."
+                'required_plan' => $requiredPlan,
+                'message' => "This feature requires the {$requiredPlan} plan or higher. Please upgrade your subscription."
             ], 403);
         }
 

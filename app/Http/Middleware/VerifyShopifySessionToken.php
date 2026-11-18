@@ -27,6 +27,7 @@ class VerifyShopifySessionToken
         if (!$authorization || !str_starts_with($authorization, 'Bearer ')) {
             // Check if this is a route that can be accessed publicly by storefront
             if ($this->isPublicRoute($request)) {
+                $request->attributes->set('shopify_admin_authenticated', false);
                 $shopDomain = $this->resolveShopDomainFromRequest($request);
                 if ($shopDomain) {
                     $request->headers->set('X-Shop-Domain', $shopDomain);
@@ -142,9 +143,6 @@ class VerifyShopifySessionToken
 
                     $tokenAcquired = true;
                     Log::info("[VerifyShopifySessionToken] Completed Token Exchange. Fresh access token saved for {$shopDomain}");
-
-                    // Register uninstall webhook dynamically
-                    $this->registerUninstallWebhook($shopDomain, $accessToken);
                 }
             }
 
@@ -158,6 +156,7 @@ class VerifyShopifySessionToken
         }
 
         // 6. Inject verified shop domain into request headers & query so controllers can consume it directly
+        $request->attributes->set('shopify_admin_authenticated', true);
         $request->headers->set('X-Shop-Domain', $shopDomain);
         $request->query->set('shop', $shopDomain);
         $request->merge(['shop' => $shopDomain]);
@@ -244,21 +243,34 @@ class VerifyShopifySessionToken
             'api/b2b/locations/countries' => ['GET'],
             'api/b2b/locations/states' => ['GET'],
             'api/b2b/locations/cities' => ['GET'],
-            'api/b2b/quotes' => ['POST', 'GET'], 
+            'api/b2b/quotes' => ['POST', 'GET'],
+            'api/b2b/translations' => ['GET'],
+            'api/b2b/ordering/lookup-skus' => ['GET', 'POST'],
+            'api/b2b/shopping-lists' => ['GET', 'POST'],
+            'api/b2b/team-members' => ['GET', 'POST'],
+            'api/b2b/credit-accounts' => ['GET'],
         ];
 
         foreach ($publicRoutes as $routePath => $methods) {
             if ($path === $routePath && in_array($method, $methods)) {
-                if ($routePath === 'api/b2b/quotes' && $method === 'GET') {
-                    // Only public if email is provided (storefront quotes tab query)
+                if (in_array($routePath, ['api/b2b/quotes', 'api/b2b/shopping-lists', 'api/b2b/credit-accounts'], true) && $method === 'GET') {
                     return $request->has('email');
+                }
+                if ($routePath === 'api/b2b/team-members' && $method === 'GET') {
+                    return $request->has('email') || $request->has('company_name');
                 }
                 return true;
             }
         }
 
-        // Allow updates of quotes from storefront (e.g. api/b2b/quotes/{id}/update)
+        // Allow customer-email-verified status updates from storefront
         if ($method === 'POST' && preg_match('/^api\/b2b\/quotes\/[^\/]+\/update$/i', $path)) {
+            return true;
+        }
+        if ($method === 'POST' && preg_match('/^api\/b2b\/shopping-lists\/[^\/]+\/status$/i', $path)) {
+            return true;
+        }
+        if ($method === 'DELETE' && preg_match('/^api\/b2b\/shopping-lists\/[^\/]+$/i', $path)) {
             return true;
         }
 

@@ -26,7 +26,7 @@
     <div class="container">
         <a href="/" class="back-link">&larr; Back to B2B Hub</a>
         <h1>Terms of Service</h1>
-        <div class="last-updated">Last Updated: {{ date('F d, Y') }}</div>
+        <div class="last-updated">Last Updated: November 18, 2026</div>
 
         <h2>1. Agreement to Terms</h2>
         <p>By installing, accessing, or using the B2B Hub Shopify application ("Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, you should immediately uninstall the application.</p>
@@ -35,7 +35,7 @@
         <p>B2B Hub provides wholesale customer onboarding, registration form management, tax verification tools, and quotation negotiation features for Shopify online merchants.</p>
 
         <h2>3. Subscription & Billing</h2>
-        <p>Subscription fees for paid tiers (Grow, Advanced, Shopify Plus) are billed on a recurring 30-day billing cycle directly through Shopify's official Billing API. Charges appear on your regular Shopify invoice. You may upgrade, downgrade, or cancel your subscription at any time within the Shopify Admin.</p>
+        <p>Subscription fees for paid tiers (Grow, Advanced, Enterprise) are billed on a recurring 30-day or annual billing cycle directly through Shopify's official Billing API. Charges appear on your regular Shopify invoice. You may upgrade, downgrade, or cancel your subscription at any time within the Shopify Admin.</p>
 
         <h2>4. Merchant Responsibilities</h2>
         <p>You agree to:</p>

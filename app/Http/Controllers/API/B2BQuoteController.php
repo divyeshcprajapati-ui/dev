@@ -133,7 +133,7 @@ class B2BQuoteController extends Controller
             ]);
 
             // Enforce 4-tier plan limits on quote creation (Grow = max 25 quotes/month & single-product quotes)
-            $shopDomain = $request->header('X-Shop-Domain') ?? ($validated['shop_domain'] ?? null);
+            $shopDomain = $request->header('X-Shop-Domain') ?? $request->query('shop') ?? ($validated['shop_domain'] ?? null);
             $shopRecord = $shopDomain ? ShopifyShop::where('shop_domain', $shopDomain)->first() : null;
             $activePlan = strtolower($shopRecord->active_plan ?? 'free');
             $isMultiItem = $request->has('items') && is_array($request->input('items')) && count($request->input('items')) > 1;
@@ -192,6 +192,13 @@ class B2BQuoteController extends Controller
                 ];
             }
 
+            if (empty($itemsData)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Quote must contain at least one item.'
+                ], 422);
+            }
+
             // Create parent B2B Quote
             $nextId = (B2BQuote::max('id') ?? 0) + 1;
             
@@ -202,7 +209,7 @@ class B2BQuoteController extends Controller
                 : $firstItem['product_name'] . ' (+ ' . (count($itemsData) - 1) . ' items)';
 
             $quoteData = [
-                'shop_domain' => $validated['shop_domain'] ?? null,
+                'shop_domain' => $shopDomain,
                 'quote_number' => '#' . $nextId,
                 'status' => 'Pending',
                 'product_name' => $prodSummary,
@@ -617,6 +624,14 @@ class B2BQuoteController extends Controller
 
         Log::info("Attempting draft order creation for quote ID: {$quote->id}");
         $res = $this->queryShopifyGraphQL($draftOrderMutation, ['input' => $input], $shopDomain);
+
+        // Fallback retry without purchasingEntity if non-Plus or B2B unavailable
+        if ((!$res['success'] || !empty($res['data']['draftOrderCreate']['userErrors'])) && isset($input['purchasingEntity'])) {
+            Log::warning("Draft order creation with purchasingEntity failed, retrying standard order without purchasingEntity for quote ID {$quote->id}");
+            unset($input['purchasingEntity']);
+            $res = $this->queryShopifyGraphQL($draftOrderMutation, ['input' => $input], $shopDomain);
+        }
+
         if ($res['success']) {
             $draftOrderData = $res['data']['draftOrderCreate'] ?? null;
             if ($draftOrderData && empty($draftOrderData['userErrors'])) {

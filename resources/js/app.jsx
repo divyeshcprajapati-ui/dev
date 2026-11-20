@@ -4,9 +4,9 @@ import { AppProvider } from '@shopify/polaris';
 import enTranslations from '@shopify/polaris/locales/en.json';
 import '@shopify/polaris/build/esm/styles.css';
 import { prewarmToken } from './utils/axios';
+import B2BExtensionsHub from './components/B2BExtensionsHub';
 
-// Lazy load route components for code splitting & LCP optimization
-const B2BExtensionsHub = lazy(() => import('./components/B2BExtensionsHub'));
+// Lazy load non-default route components for code splitting & initial LCP speed
 const Translations = lazy(() => import('./components/Translations'));
 const CustomerListing = lazy(() => import('./components/CustomerListing'));
 const Pricing = lazy(() => import('./components/Pricing'));
@@ -34,10 +34,6 @@ function prefetchRoute(url) {
   if (!url || IS_EXTERNAL_LINK_REGEX.test(url)) return;
   const path = url.split('?')[0].split('#')[0];
   switch (path) {
-    case '/':
-    case '/b2b-register':
-      import('./components/B2BExtensionsHub');
-      break;
     case '/customers':
       import('./components/CustomerListing');
       break;
@@ -99,59 +95,106 @@ function LinkLikeComponent({ children, url, ...rest }) {
   );
 }
 
-// Dev-only performance and LCP monitoring logger for page transitions.
-// Stripped in production builds so it doesn't add PerformanceObserver overhead.
+// Performance and LCP monitoring logger for Shopify Admin embedded pages.
 function PerformanceLogger() {
   const location = useLocation();
 
+  // 1. Initial Page Load LCP Observer (measures native browser document LCP ONCE on app mount per Web Vitals spec)
   useEffect(() => {
-    if (import.meta.env.PROD) return;
+    let lcpObserver;
+    const stopObserver = () => {
+      if (lcpObserver) {
+        try { lcpObserver.disconnect(); } catch (_) {}
+      }
+    };
 
-    const startTime = performance.now();
-    console.log(`[Navigation] Navigating to: ${location.pathname}`);
-
-    let observer;
     try {
-      observer = new PerformanceObserver((entryList) => {
-        const entries = entryList.getEntries();
-        const lastEntry = entries[entries.length - 1];
-        const lcp = lastEntry.startTime;
-        let status = 'GOOD';
-        let color = '#008060';
-        if (lcp > 4000) {
-          status = 'POOR';
-          color = '#d82c0d';
-        } else if (lcp > 2500) {
-          status = 'NEEDS IMPROVEMENT';
-          color = '#ff9800';
-        }
-        console.log(
-          `%c[LCP Monitor] ${location.pathname} - LCP: ${lcp.toFixed(2)}ms (Status: ${status})`,
-          `color: ${color}; font-weight: bold;`,
-          lastEntry
-        );
+      if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('largest-contentful-paint')) {
+        lcpObserver = new PerformanceObserver((entryList) => {
+          const entries = entryList.getEntries();
+          const lastEntry = entries[entries.length - 1];
+          if (!lastEntry) return;
+
+          const lcpValue = Math.round(lastEntry.startTime);
+          let badgeColor = '#008060';
+          let statusText = 'GOOD (< 2.5s)';
+          if (lcpValue > 4000) {
+            badgeColor = '#dc2626';
+            statusText = 'POOR (> 4.0s)';
+          } else if (lcpValue > 2500) {
+            badgeColor = '#f59e0b';
+            statusText = 'NEEDS IMPROVEMENT (2.5s - 4.0s)';
+          }
+
+          console.log(
+            `%c[INITIAL APP LCP]%c ${window.location.pathname} → ${lcpValue}ms (%c${statusText}%c)`,
+            `background: ${badgeColor}; color: #ffffff; padding: 3px 7px; border-radius: 4px; font-weight: bold; font-size: 11px;`,
+            'font-weight: bold; color: #111827; font-size: 12px;',
+            `color: ${badgeColor}; font-weight: bold;`,
+            'color: #111827;',
+            lastEntry.element || lastEntry
+          );
+
+          window.__b2b_initial_lcp = { lcp: lcpValue, status: statusText, entry: lastEntry };
+        });
+        lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
+
+        // Disconnect observer on first user interaction as per official Google Core Web Vitals spec
+        ['keydown', 'click', 'pointerdown', 'touchstart'].forEach(type => {
+          window.addEventListener(type, stopObserver, { once: true, passive: true });
+        });
+      }
+    } catch (_) {}
+
+    return () => {
+      stopObserver();
+      ['keydown', 'click', 'pointerdown', 'touchstart'].forEach(type => {
+        window.removeEventListener(type, stopObserver);
       });
-      observer.observe({ type: 'largest-contentful-paint', buffered: true });
-    } catch (e) {
-      // PerformanceObserver not supported
-    }
+    };
+  }, []); // Run ONCE on initial document load
+
+  // 2. SPA Route Transition & Render Timing (measures every tab/page change)
+  useEffect(() => {
+    const pagePath = location.pathname;
+    const navStartTime = performance.now();
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const renderTime = performance.now() - startTime;
-        let status = 'GOOD';
-        let color = '#008060';
-        if (renderTime > 300) { status = 'POOR'; color = '#d82c0d'; }
-        else if (renderTime > 100) { status = 'NEEDS IMPROVEMENT'; color = '#ff9800'; }
+        const routeRenderTime = Math.round(performance.now() - navStartTime);
+        let badgeColor = '#008060';
+        let statusText = 'FAST (< 300ms)';
+        if (routeRenderTime > 800) {
+          badgeColor = '#dc2626';
+          statusText = 'SLOW (> 800ms)';
+        } else if (routeRenderTime > 300) {
+          badgeColor = '#f59e0b';
+          statusText = 'MODERATE (300ms - 800ms)';
+        }
+
         console.log(
-          `%c[Performance] ${location.pathname} rendered and painted in ${renderTime.toFixed(2)}ms (Status: ${status})`,
-          `color: ${color}; font-weight: bold;`
+          `%c[PAGE RENDER]%c ${pagePath} rendered in ${routeRenderTime}ms (%c${statusText}%c)`,
+          `background: ${badgeColor}; color: #ffffff; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;`,
+          'font-weight: 600; color: #374151; font-size: 11px;',
+          `color: ${badgeColor}; font-weight: bold;`,
+          'color: #374151;'
         );
+
+        window.__b2b_route_timings = window.__b2b_route_timings || [];
+        window.__b2b_route_timings.push({
+          page: pagePath,
+          renderTime: `${routeRenderTime}ms`,
+          status: statusText,
+          timestamp: new Date().toLocaleTimeString()
+        });
+
+        window.getB2BPerformance = () => {
+          console.table(window.__b2b_route_timings);
+          return { initialLCP: window.__b2b_initial_lcp, routes: window.__b2b_route_timings };
+        };
       });
     });
-
-    return () => { if (observer) observer.disconnect(); };
-  }, [location]);
+  }, [location.pathname]);
 
   return null;
 }
@@ -232,10 +275,8 @@ function AdminRoutes() {
   const location = useLocation();
   const [isPending, setIsPending] = useState(false);
 
-  // Eagerly prefetch the two most-visited routes immediately on app mount.
-  // This ensures chunks are already cached before the user clicks anything.
+  // Eagerly prefetch the most-visited route immediately on app mount.
   useEffect(() => {
-    import('./components/B2BExtensionsHub');
     import('./components/CustomerListing');
   }, []);
 

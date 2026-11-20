@@ -53,42 +53,55 @@ class B2BTranslationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
-        if (!$shop) {
-            return response()->json(['success' => false, 'message' => 'Shop domain is required.'], 400);
+        try {
+            $shop = $request->header('X-Shop-Domain') ?? $request->query('shop');
+            if (!$shop) {
+                return response()->json(['success' => false, 'message' => 'Shop domain is required.'], 400);
+            }
+
+            $locale = strtolower(trim((string) $request->query('locale', '')));
+            $section = $request->query('section');
+
+            $locales = B2BTranslation::where('shop_domain', $shop)
+                ->distinct()
+                ->pluck('locale')
+                ->values()
+                ->toArray();
+
+            $query = B2BTranslation::where('shop_domain', $shop);
+            if ($locale) {
+                $query->where('locale', $locale);
+            }
+            if ($section) {
+                $query->where('section', $section);
+            }
+
+            $rows = $query->get();
+            $grouped = [];
+            foreach ($rows as $row) {
+                $grouped[$row->locale][$row->section][$row->translation_key] = $row->value;
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'locales' => $locales,
+                    'defaults' => self::DEFAULT_STRINGS,
+                    'translations' => $grouped,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error loading translations: ' . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'locales' => [],
+                    'defaults' => self::DEFAULT_STRINGS,
+                    'translations' => [],
+                ],
+                'warning' => 'Loaded default translations: ' . $e->getMessage()
+            ]);
         }
-
-        $locale = strtolower(trim((string) $request->query('locale', '')));
-        $section = $request->query('section');
-
-        $locales = B2BTranslation::where('shop_domain', $shop)
-            ->distinct()
-            ->pluck('locale')
-            ->values()
-            ->toArray();
-
-        $query = B2BTranslation::where('shop_domain', $shop);
-        if ($locale) {
-            $query->where('locale', $locale);
-        }
-        if ($section) {
-            $query->where('section', $section);
-        }
-
-        $rows = $query->get();
-        $grouped = [];
-        foreach ($rows as $row) {
-            $grouped[$row->locale][$row->section][$row->translation_key] = $row->value;
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'locales' => $locales,
-                'defaults' => self::DEFAULT_STRINGS,
-                'translations' => $grouped,
-            ],
-        ]);
     }
 
     public function upsert(Request $request): JsonResponse

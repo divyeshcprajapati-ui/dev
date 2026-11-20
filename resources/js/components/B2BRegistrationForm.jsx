@@ -209,51 +209,8 @@ export default function B2BRegistrationForm({ onBack }) {
         }
     }, [previewSelectedCountryCode]);
 
-    // Submissions State (Temporary Local Storage)
-    const [submissions, setSubmissions] = useState(() => {
-        const saved = localStorage.getItem('b2b_submissions');
-        const defaultMocks = [
-            {
-                id: '1',
-                company: 'Acme Corp',
-                contact: 'John Doe',
-                email: 'john@acme.com',
-                taxId: 'US-987654321',
-                status: 'Pending',
-                date: '2026-06-08'
-            },
-            {
-                id: '2',
-                company: 'Global Trade LLC',
-                contact: 'Sarah Jenkins',
-                email: 's.jenkins@globaltrade.com',
-                taxId: 'GB-123456789',
-                status: 'Approved',
-                date: '2026-06-07'
-            },
-            {
-                id: '3',
-                company: 'Apex Retailers',
-                contact: 'Michael Chang',
-                email: 'mchang@apex.io',
-                taxId: 'CA-445566778',
-                status: 'Rejected',
-                date: '2026-06-06'
-            }
-        ];
-
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                    return parsed;
-                }
-            } catch (e) {
-                console.error("Failed to parse submissions", e);
-            }
-        }
-        return defaultMocks;
-    });
+    // Submissions State (Applications loaded from Database)
+    const [submissions, setSubmissions] = useState([]);
 
     const [loadingLeads, setLoadingLeads] = useState(false);
     const [leadsError, setLeadsError] = useState('');

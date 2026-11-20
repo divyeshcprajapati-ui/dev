@@ -67,7 +67,7 @@ class B2BOrderingController extends Controller
           }
         }';
 
-        $res = $this->queryShopifyGraphQL($gql, ['query' => "sku:*{$queryStr}* OR title:*{$queryStr}*"], $shop);
+        $res = $this->queryShopifyGraphQL($gql, ['query' => "sku:*{$queryStr}* OR product_title:*{$queryStr}* OR title:*{$queryStr}*"], $shop);
         if (!$res['success']) {
             return response()->json([
                 'success' => false,

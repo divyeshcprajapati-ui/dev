@@ -49,7 +49,7 @@
           <div style="display: flex; flex-direction: column; gap: 20px;">
             <div id="detail-items-container" style="display: flex; flex-direction: column; gap: 12px;">
               <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; display: flex; gap: 16px; align-items: center;">
-                <img id="detail-product-img" src="" alt="Product Image" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <img id="detail-product-img" src="" alt="Product Image" width="80" height="80" loading="lazy" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <div style="flex: 1;">
                   <h4 id="detail-product-name" style="margin: 0; font-size: 18px; font-weight: bold; color: #1a1a1a;"></h4>
                   <p id="detail-original-price" style="margin: 6px 0 0 0; font-size: 14px; color: #64748b;"></p>
@@ -87,7 +87,7 @@
     <div style="text-align: center; padding: 50px 20px; background: #fff; border: 1px solid #e1e3e5; border-radius: 12px;">
       <h3 style="margin-bottom: 12px; color: #1a1a1a;">Please Log In</h3>
       <p style="color: #6b7280; margin-bottom: 24px;">You must be logged in to view and manage your quotations.</p>
-      <a href="/account/login" class="button" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold;">Log In</a>
+      <a href="{{ routes.account_login_url }}" class="button" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold;">Log In</a>
     </div>
   {%- endif -%}
 </div>

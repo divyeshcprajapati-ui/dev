@@ -38,7 +38,7 @@
         <div class="b2b-cart-items-list" style="display: flex; flex-direction: column; gap: 12px; max-height: 250px; overflow-y: auto; padding-right: 8px;">
           {% for item in cart.items %}
             <div class="b2b-cart-item-row" data-title="{{ item.product.title }} - {{ item.variant.title }}" data-original-price="{{ item.price | money_without_currency }}" data-qty="{{ item.quantity }}" data-image="{{ item.image | image_url: width: 120 }}" style="display: flex; gap: 16px; align-items: center; background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <img src="{{ item.image | image_url: width: 80 }}" alt="{{ item.product.title }}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
+              <img src="{{ item.image | image_url: width: 80 }}" alt="{{ item.product.title }}" width="50" height="50" loading="lazy" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd;">
               <div style="flex: 1; text-align: left;">
                 <strong style="font-size: 14px;">{{ item.product.title }}</strong>
                 {% unless item.variant.title contains 'Default' %}
